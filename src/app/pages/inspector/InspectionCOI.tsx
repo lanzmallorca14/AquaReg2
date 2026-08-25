@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ChangeEvent, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -215,12 +215,12 @@ export default function InspectionCOI() {
     }
   }, [coiData.length, coiData.breadth, coiData.depth]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setCoiData(prev => ({ ...prev, [name]: value.toUpperCase() }));
   };
 
-  const handleSaveRecord = async (e: React.FormEvent) => {
+  const handleSaveRecord = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedVessel) return;
 

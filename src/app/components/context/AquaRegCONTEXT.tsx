@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { SupabaseClient } from '@supabase/supabase-js';
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { createContext, useContext, useState, useEffect, type Dispatch, type SetStateAction, type ReactNode } from 'react';
+import type { SupabaseClient, AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 // --- Interfaces ---
 
@@ -110,7 +109,7 @@ interface AquaRegContextType {
   logout: () => Promise<void>;
   resetPassword: (email: string, newPassword: string) => Promise<boolean>; 
   Vessels: Vessel[];
-  setCurrentUser: React.Dispatch<React.SetStateAction<UserSession | null>>;
+  setCurrentUser: Dispatch<SetStateAction<UserSession | null>>;
   addVessel: (vData: any) => Promise<Vessel | null>;
   updateVessel: (id: string, data: Partial<Vessel>) => Promise<boolean>;
   updateVesselStatus: (id: string, newStatus: Vessel['status']) => Promise<void>;
@@ -134,7 +133,7 @@ const AquaRegContext = createContext<AquaRegContextType | undefined>(undefined);
 export const AquaRegProvider = ({
   children, supabase
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   supabase: SupabaseClient;
 }) => {
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   User, Lock, MapPin, 
@@ -10,7 +10,6 @@ import {
 import { Input } from './components/ui/input'; 
 import { Button } from './components/ui/button';
 import { Label } from './components/ui/label';
-import type { FormEvent } from "react";
 import { toast } from 'sonner';
 import { useAquaData, useAquaReg } from '../app/components/context/AquaRegCONTEXT';
 

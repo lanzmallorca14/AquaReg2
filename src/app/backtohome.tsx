@@ -1,4 +1,3 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Ship } from 'lucide-react';
 import { Button } from '../app/components/ui/button'; // Adjust path based on your folder structure

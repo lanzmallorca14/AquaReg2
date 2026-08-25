@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, RefreshCcw, CheckCircle2, ShieldCheck, KeyRound } from 'lucide-react';
 import { Button } from './components/ui/button';
@@ -39,7 +39,7 @@ export default function RecoveryPage() {
     return { label: "Strong", color: "text-emerald-700", score };
   };
 
-  const handleInspectorRecovery = async (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleInspectorRecovery = async (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     if (loading) return;
 

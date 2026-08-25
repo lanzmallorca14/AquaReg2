@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { 
   RefreshCcw, Search, Calendar, AlertTriangle, 
   ArrowRight, FileCheck, ShieldAlert, History,
@@ -202,7 +202,7 @@ export default function RenewalPage() {
 }
 
 // --- HELPER COMPONENT ---
-function RenewalStatCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+function RenewalStatCard({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
   return (
     <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
       <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-1">

@@ -1,10 +1,10 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Anchor, Info } from 'lucide-react';
+import { Anchor, Info } from 'lucide-react';
 import heroBg from './photo/romblom1.jpg'; // Adjust path if your photo folder is elsewhere
 
 interface LayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export default function Layout({ children }: LayoutProps) {

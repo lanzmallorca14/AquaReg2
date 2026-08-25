@@ -1,4 +1,3 @@
-import React from 'react';
 import { createBrowserRouter, RouterProvider, Route, createRoutesFromElements, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { supabase } from '../supabaseClient';

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { 
   User, MapPin, Phone, Box, FileText, 
   ArrowLeft, Edit3, Search, Eye, 
@@ -320,7 +320,7 @@ function ManualEntryModal({ onClose }: { onClose: () => void }) {
     bfarPermit: ''
   });
 
-  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleCategoryChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setForm(prev => ({
       ...prev,
@@ -340,7 +340,7 @@ function ManualEntryModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
 
     if (!form.vesselName.trim() || !form.ownerName.trim()) {

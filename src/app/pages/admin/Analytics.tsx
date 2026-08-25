@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { useAquaData } from '../../components/context/AquaRegCONTEXT';
 import { 
   BarChart3, Calendar, Clock, Ship, 
@@ -276,7 +276,7 @@ function TimeCard({ title, data, icon, color }: any) {
 interface InsightCardProps {
   title: string;
   value: string | number;
-  icon: React.ReactNode;
+  icon: ReactNode;
   trend: string;
 }
 

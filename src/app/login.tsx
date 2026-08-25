@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, UserCheck, Lock, Mail, 
@@ -11,12 +11,12 @@ import { useAquaReg } from './components/context/AquaRegCONTEXT';
 import Layout from './components/Layout';
 
 interface InputFieldProps {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   type: string;
   placeholder: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
   theme: 'blue' | 'indigo';
   disabled?: boolean;
   showPasswordToggle?: boolean;
@@ -117,7 +117,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (hp) return;
     if (isLocked || loading) return;

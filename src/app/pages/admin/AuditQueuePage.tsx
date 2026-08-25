@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -135,7 +135,7 @@ export default function AuditQueuePage() {
   );
 }
 
-function DetailItem({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+function DetailItem({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
   return (
     <div>
       <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">

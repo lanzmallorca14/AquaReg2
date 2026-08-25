@@ -1,5 +1,5 @@
 import { aquaOfflineDB } from "./db";
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Helper to format payload and ensure primary keys exist
 async function formatOfflineData(data: any, supabase: SupabaseClient) {

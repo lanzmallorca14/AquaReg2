@@ -1,6 +1,6 @@
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import React, { useState } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { 
@@ -74,7 +74,7 @@ export default function VerifyPermit() {
     });
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value.toUpperCase());
   };
 

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo, isValidElement, cloneElement, type ReactNode, type ReactElement } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Clock3, ShieldCheck, 
@@ -127,10 +127,10 @@ export default function InspectorOverview() {
                     </div>
                     <div>
                       <p className="text-sm font-black uppercase italic text-slate-900 leading-none">
-                        {v.vessel_name || v.name}
+                        {v.vessel_name || 'Unnamed Vessel'}
                       </p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
-                        Owner: {v.owner_name || v.owner}
+                        Owner: {v.owner_name}
                       </p>
                     </div>
                   </div>
@@ -162,7 +162,7 @@ export default function InspectorOverview() {
 interface OverviewCardProps {
   label: string;
   value: string | number;
-  icon: React.ReactNode;
+  icon: ReactNode;
   color: 'blue' | 'emerald' | 'orange' | 'violet';
 }
 
@@ -177,7 +177,7 @@ function OverviewCard({ label, value, icon, color }: OverviewCardProps) {
   return (
     <Card className="p-6 rounded-[2rem] border-slate-200 bg-white hover:border-blue-400 hover:shadow-lg transition-all group">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 border transition-transform group-hover:scale-110 ${colorClasses[color]}`}>
-        {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { size: 18 }) : icon}
+        {isValidElement(icon) ? cloneElement(icon as ReactElement<{ size?: number }>, { size: 18 }) : icon}
       </div>
       <div>
         <p className="text-3xl font-black tracking-tight text-slate-900 leading-none">{value}</p>

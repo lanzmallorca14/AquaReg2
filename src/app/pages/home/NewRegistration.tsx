@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, type ChangeEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -234,7 +234,7 @@ export default function AquaRegNewRegistration() {
     }));
   };
 
-  const processFile = async (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
+  const processFile = async (e: ChangeEvent<HTMLInputElement>, key: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
 

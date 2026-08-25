@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { 
   LayoutDashboard, Ship, BarChart3, Settings, LogOut, 
@@ -22,7 +22,6 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
   currentUser,
   loading,
   authInitialized,
-  logout,
 } = useAquaAuth();
 
  const handleLogout = async () => {

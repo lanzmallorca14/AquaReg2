@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState, useMemo } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { 
   ClipboardCheck, 
@@ -22,7 +22,7 @@ export default function InspectorLayout({ children }: InspectorLayoutProps) {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const profile = React.useMemo(() => {
+  const profile = useMemo(() => {
     if (!currentUser) return null;
     return inspectors.find(ins => ins.email.toLowerCase() === currentUser.email.toLowerCase());
   }, [currentUser, inspectors]);

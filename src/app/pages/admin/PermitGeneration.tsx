@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ChangeEvent } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -724,7 +724,7 @@ navigate(`/admin/permit-portal/${id}`, {
     navigate(`/admin/permit-portal/${selectedVesselId}`, { state: { orNumber: tempOrNumber } });
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
   const { name, value } = e.target;
 
   setData(prev => ({
