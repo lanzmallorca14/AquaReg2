@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  /* Add more as needed, or v4 will use its internal defaults */
+}
+
+/* Hide Sonner toast notifications when printing */
+@media print {
+  [data-sonner-toaster],
+  [data-sonner-toast] {
+    display: none !important;
+  }
+}
