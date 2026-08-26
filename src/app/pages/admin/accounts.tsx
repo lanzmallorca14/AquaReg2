@@ -30,6 +30,7 @@ export default function AccountsPage() {
   const [search, setSearch] = useState("");
   const [selectedInspector, setSelectedInspector] = useState<any>(null);
   const [selectedRecovery, setSelectedRecovery] = useState<any>(null);
+  const [inspectorImageUrl, setInspectorImageUrl] = useState<string>("");
   const [passwordRequests, setPasswordRequests] = useState<any[]>([]);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
 
@@ -59,15 +60,83 @@ export default function AccountsPage() {
     loadPasswordRequests();
   }, [supabase]);
 
+
+  useEffect(() => {
+  const loadInspectorImage = async () => {
+    if (!selectedInspector) {
+      setInspectorImageUrl("");
+      return;
+    }
+
+    const imagePath =
+      selectedInspector.idImageUrl ||
+      selectedInspector.id_image_url ||
+      "";
+
+    if (!imagePath) {
+      setInspectorImageUrl("");
+      return;
+    }
+
+    const image = String(imagePath).trim();
+
+    // If database already contains a complete URL
+    if (
+      image.startsWith("http://") ||
+      image.startsWith("https://") ||
+      image.startsWith("data:image/") ||
+      image.startsWith("blob:")
+    ) {
+      setInspectorImageUrl(image);
+      return;
+    }
+
+    try {
+      console.log("ID storage path:", image);
+
+      // Your system uses the id-scans bucket
+      const { data, error } = await supabase.storage
+        .from("id-scans")
+        .createSignedUrl(image, 3600);
+
+      if (error) {
+        console.error("Unable to create ID image URL:", error);
+
+        // Fallback in case the bucket is public
+        const { data: publicData } = supabase.storage
+          .from("id-scans")
+          .getPublicUrl(image);
+
+        if (publicData?.publicUrl) {
+          setInspectorImageUrl(publicData.publicUrl);
+          return;
+        }
+
+        setInspectorImageUrl("");
+        return;
+      }
+
+      console.log("ID image URL:", data?.signedUrl);
+
+      setInspectorImageUrl(data?.signedUrl || "");
+    } catch (error) {
+      console.error("ID image loading failed:", error);
+      setInspectorImageUrl("");
+    }
+  };
+
+  loadInspectorImage();
+}, [selectedInspector, supabase]);
+
   const handleApprove = async (id: string, name: string) => {
     try {
-      await updateInspectorStatus(id, 'approved'); 
-      toast.success("Identity Verified", { 
-        description: `${name || 'Personnel'} has been granted system access.`,
+      await updateInspectorStatus(id, 'approved');
+      toast.success("Access Restored", {
+        description: `${name || 'Personnel'} has been approved and can access the portal.`,
         icon: <ShieldCheck className="text-emerald-500" size={16} />
       });
     } catch (error) {
-      toast.error("Operation Failed", { description: "Could not update personnel status." });
+      toast.error("Operation Failed", { description: "Could not approve the inspector." });
     }
   };
 
@@ -140,6 +209,7 @@ export default function AccountsPage() {
       setProcessingRequestId(null);
     }
   };
+
 
   if (loading) {
     return (
@@ -409,8 +479,9 @@ export default function AccountsPage() {
             <div className="space-y-4">
               <div className="flex justify-center">
                 <img
-                  src={selectedInspector.municipal_id_image || selectedInspector.municipalIdImage || '/placeholder-id.png'}
-                  alt="ID" className="w-64 h-40 object-cover rounded-xl border shadow-inner"
+                  src={inspectorImageUrl || selectedInspector?.idImageUrl || selectedInspector?.id_image_url || "/placeholder-id.png"}
+                  alt="Municipal ID"
+                  className="w-64 h-40 object-contain rounded-xl border border-slate-300"
                 />
               </div>
 

@@ -407,23 +407,34 @@ export const AquaRegProvider = ({
   }, [supabase]);
 
   // Helper function to upload files to private bucket
-const uploadFile = async (bucket: string, path: string, fileObject: File | Blob): Promise<string | null> => {
+const uploadFile = async (
+  bucket: string,
+  path: string,
+  fileObject: File | Blob
+): Promise<string | null> => {
   try {
-    const cleanBucketName = bucket.toLowerCase().replace(/[^a-z0-9-]/g, '');
-
     const { data, error } = await supabase.storage
-      .from(cleanBucketName)
+      .from(bucket)
       .upload(path, fileObject, {
         upsert: true,
-        contentType: fileObject.type,
+        contentType: fileObject.type || "image/png",
       });
 
-    if (error) throw error;
-    // Return only the private storage path (e.g., "userId/123456789.png")
-    return data.path; 
+    if (error) {
+      console.error("Upload error:", error);
+      throw error;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(data.path);
+
+    console.log("Uploaded image URL:", urlData.publicUrl);
+
+    return urlData.publicUrl;
   } catch (error: any) {
-    console.error(`File upload failed for bucket ${bucket}:`, error.message);
-    throw error;
+    console.error("File upload failed:", error.message);
+    return null;
   }
 };
 

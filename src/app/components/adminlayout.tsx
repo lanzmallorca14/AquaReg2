@@ -1,14 +1,11 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { useNavigate, useLocation, Outlet, Navigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Ship, BarChart3, Settings, LogOut, 
   ShieldAlert, Menu, X, PersonStandingIcon, Printer 
 } from 'lucide-react';
 import { useAquaAuth } from '../../app/components/context/AquaRegCONTEXT';
-import { Navigate } from "react-router-dom";
 import { supabase } from '../../supabaseClient';
-
-
 
 interface AdminLayoutProps {
   children?: ReactNode;
@@ -19,36 +16,33 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const {
-  currentUser,
-  loading,
-  authInitialized,
-} = useAquaAuth();
+    currentUser,
+    loading,
+    authInitialized,
+  } = useAquaAuth();
 
- const handleLogout = async () => {
-  try {
-   
-    const { error } = await supabase.auth.signOut({ scope: 'global' });
-    if (error) throw error;
-  } catch (error) {
-    console.warn("Sign out request failed, likely already signed out:", );
-  } finally {
-   
-    window.location.href = '/login';
-  }
-};
+  const handleLogout = async () => {
+    try {
+      setIsMobileMenuOpen(false);
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      if (error) throw error;
+    } catch (error) {
+      console.warn("Sign out request failed, likely already signed out:", error);
+    } finally {
+      // Use client-side router navigation instead of window.location.href
+      // to prevent full page refreshes and reload flickers
+      navigate('/login', { replace: true });
+    }
+  };
 
+  useEffect(() => {
+    if (loading) return;
 
-   useEffect(() => {
-  if (loading) return;
+    if (!loading && authInitialized && !currentUser) {
+      navigate("/login", { replace: true });
+    }
+  }, [loading, authInitialized, currentUser, navigate]);
 
-  if(!loading && authInitialized && !currentUser){
- navigate("/login");
-}
-
- 
-}, [loading, currentUser, navigate]);
-
- 
   const adminNavItems = [
     { label: 'Overview', path: '/admin', icon: <LayoutDashboard size={14} /> },
     { label: 'Audit', path: '/admin/audit-queue', icon: <Ship size={14} /> },
@@ -58,21 +52,18 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
     { label: 'Inspectors', path: '/admin/accounts', icon: <PersonStandingIcon size={14} /> },
   ];
 
-if (loading) {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p>Authenticating...</p>
-    </div>
-  );
-}
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Authenticating...</p>
+      </div>
+    );
+  }
 
-if (!currentUser) {
-  return <Navigate to="/login" replace />;
-}
+  if (!currentUser || currentUser.role !== "admin") {
+    return <Navigate to="/login" replace />;
+  }
 
-if (currentUser.role !== "admin") {
-  return <Navigate to="/login" replace />;
-}
   return (
     <div className="min-h-screen bg-[#FDFDFD] flex flex-col font-sans antialiased text-slate-900">
       <nav className="print:hidden sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100">
@@ -134,7 +125,6 @@ if (currentUser.role !== "admin") {
         </div>
       </nav>
 
-      
       {isMobileMenuOpen && (
         <div className="print:hidden fixed inset-0 z-[60] bg-white p-8 flex flex-col animate-in fade-in slide-in-from-right duration-300">
           <div className="flex justify-between items-center mb-12">
@@ -168,11 +158,10 @@ if (currentUser.role !== "admin") {
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-6 py-8 md:py-12 animate-in fade-in duration-700">
           <div className="relative">
-        
             {children || <Outlet />}
           </div>
         </div>
       </main>
     </div>
   );
-}
+};
