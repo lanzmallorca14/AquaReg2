@@ -1,10 +1,16 @@
-import { useState, type MouseEvent } from 'react';
+import { useState, useMemo, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, RefreshCcw, CheckCircle2, ShieldCheck, KeyRound } from 'lucide-react';
+import { 
+  ChevronLeft, RefreshCcw, CheckCircle2, ShieldCheck, KeyRound, 
+  Eye, EyeOff, AlertCircle, ShieldAlert, Lock
+} from 'lucide-react';
 import { Button } from './components/ui/button';
 import { toast } from 'sonner';
 import { useAquaReg } from './components/context/AquaRegCONTEXT';
 import Layout from './components/Layout';
+
+// Common weak passwords to disallow
+const DISALLOWED_PASSWORDS = ["password", "12345678", "123456789", "qwerty", "admin123", "password123"];
 
 export default function RecoveryPage() {
   const navigate = useNavigate();
@@ -12,42 +18,56 @@ export default function RecoveryPage() {
 
   const [loading, setLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
   const [recoveryData, setRecoveryData] = useState({
     fullName: "",
     age: "",
     email: "",
     municipalId: "",
     municipalIdImage: null as File | null,
-    oldPassword: "",
-    newPassword: ""
+    newPassword: "",
+    confirmPassword: ""
   });
 
-  const checkPasswordStrength = (password: string) => {
-    let score = 0;
-    if (password.length >= 8) score++;
-    if (/[A-Z]/.test(password)) score++;
-    if (/[a-z]/.test(password)) score++;
-    if (/[0-9]/.test(password)) score++;
-    if (/[^A-Za-z0-9]/.test(password)) score++;
+  // --- ENHANCED SECURITY VALIDATION METRICS ---
+  const securityMetrics = useMemo(() => {
+    const p = recoveryData.newPassword || '';
+    const lowerP = p.toLowerCase();
+    
+    return {
+      length: p.length >= 10,
+      hasUpper: /[A-Z]/.test(p),
+      hasLower: /[a-z]/.test(p),
+      hasNumber: /\d/.test(p),
+      hasSymbol: /[!@#$%^&*(),.?":{}|<>]/.test(p),
+      notCommon: !DISALLOWED_PASSWORDS.includes(lowerP),
+      match: p === recoveryData.confirmPassword && p !== ''
+    };
+  }, [recoveryData.newPassword, recoveryData.confirmPassword]);
 
-    if (score <= 2) {
-      return { label: "Too Weak", color: "text-red-600", score };
-    }
-    if (score === 3 || score === 4) {
-      return { label: "Moderate", color: "text-amber-600", score };
-    }
-    return { label: "Strong", color: "text-emerald-700", score };
-  };
+  // Calculate Password Strength Score (0 to 100%)
+  const passwordStrengthScore = useMemo(() => {
+    let score = 0;
+    if (securityMetrics.length) score += 20;
+    if (securityMetrics.hasUpper) score += 20;
+    if (securityMetrics.hasLower) score += 20;
+    if (securityMetrics.hasNumber) score += 20;
+    if (securityMetrics.hasSymbol) score += 20;
+    return score;
+  }, [securityMetrics]);
+
+  const isSecureEnough = Object.values(securityMetrics).every(Boolean);
 
   const handleInspectorRecovery = async (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     if (loading) return;
 
     try {
-      const strength = checkPasswordStrength(recoveryData.newPassword);
-
-      if (strength.label !== "Strong") {
-        toast.error("Password must be Strong before submitting.");
+      if (!isSecureEnough) {
+        toast.error("Security criteria not met", {
+          description: "Please fulfill all password security rules before submitting."
+        });
         return;
       }
 
@@ -56,11 +76,11 @@ export default function RecoveryPage() {
         !recoveryData.age ||
         !recoveryData.email ||
         !recoveryData.municipalId ||
-        !recoveryData.municipalIdImage ||
-        !recoveryData.oldPassword ||
-        !recoveryData.newPassword
+        !recoveryData.municipalIdImage
       ) {
-        toast.error("Complete all recovery fields and upload your Municipal ID scan.");
+        toast.error("Incomplete Recovery Form", {
+          description: "Complete all recovery fields and upload your Municipal ID scan."
+        });
         return;
       }
 
@@ -109,17 +129,6 @@ export default function RecoveryPage() {
 
       if (user.id_number !== recoveryData.municipalId) {
         toast.error("Municipal ID does not match records");
-        setLoading(false);
-        return;
-      }
-
-      const { error: oldPasswordError } = await supabase.auth.signInWithPassword({
-        email,
-        password: recoveryData.oldPassword
-      });
-
-      if (oldPasswordError) {
-        toast.error("Old password is incorrect");
         setLoading(false);
         return;
       }
@@ -191,14 +200,14 @@ export default function RecoveryPage() {
           <button 
             type="button"
             onClick={() => navigate('/login', { replace: true })}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/80 hover:bg-white border border-slate-300 text-black font-black uppercase text-[10px] tracking-widest backdrop-blur-md transition-all shadow-lg active:scale-95"
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/80 hover:bg-white border border-slate-300 text-black font-black uppercase text-[10px] tracking-widest backdrop-blur-md transition-all shadow-lg active:scale-95 cursor-pointer"
           >
             <ChevronLeft size={16} /> Back to Login
           </button>
         </div>
 
-        {/* --- CENTERED & WIDER RECOVERY CONTAINER --- */}
-        <div className="w-full max-w-[500px] mt-6">
+        {/* --- CENTERED RECOVERY CONTAINER --- */}
+        <div className="w-full max-w-[560px] mt-6">
           <div className="text-center mb-6 space-y-2">
             <div className="mx-auto w-16 h-16 rounded-3xl flex items-center justify-center shadow-lg mb-3 text-white bg-blue-600 border border-slate-300">
               <KeyRound size={30} />
@@ -236,104 +245,158 @@ export default function RecoveryPage() {
                 <Button
                   type="button"
                   onClick={() => navigate('/login', { replace: true })}
-                  className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-widest border border-slate-300 shadow-lg"
+                  className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-widest border border-slate-300 shadow-lg cursor-pointer"
                 >
                   Return to Login Portal
                 </Button>
               </div>
             ) : (
-              <div className="p-10 space-y-6 overflow-y-auto max-h-[75vh]">
-                <div className="space-y-2 text-left">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Full Name</label>
-                  <input
-                    placeholder="Enter your full registered name"
-                    value={recoveryData.fullName}
-                    disabled={loading}
-                    onChange={e => setRecoveryData({ ...recoveryData, fullName: e.target.value })}
-                    className="w-full h-14 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
-                  />
-                </div>
+              <div className="p-8 sm:p-10 space-y-6 overflow-y-auto max-h-[75vh]">
+                
+                {/* SECTION: PERSONAL IDENTITY */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                    <ShieldAlert size={16} className="text-blue-600" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">1. Verification Credentials</span>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2 text-left">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Age</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Full Name</label>
                     <input
-                      placeholder="Age"
-                      type="number"
-                      value={recoveryData.age}
+                      placeholder="Enter your full registered name"
+                      value={recoveryData.fullName}
                       disabled={loading}
-                      onChange={e => setRecoveryData({ ...recoveryData, age: e.target.value })}
-                      className="w-full h-14 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
+                      onChange={e => setRecoveryData({ ...recoveryData, fullName: e.target.value })}
+                      className="w-full h-12 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
                     />
                   </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Age</label>
+                      <input
+                        placeholder="Age"
+                        type="number"
+                        value={recoveryData.age}
+                        disabled={loading}
+                        onChange={e => setRecoveryData({ ...recoveryData, age: e.target.value })}
+                        className="w-full h-12 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Municipal ID Number</label>
+                      <input
+                        placeholder="ID Number"
+                        value={recoveryData.municipalId}
+                        disabled={loading}
+                        onChange={e => setRecoveryData({ ...recoveryData, municipalId: e.target.value })}
+                        className="w-full h-12 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2 text-left">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Municipal ID Number</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Registered Email</label>
                     <input
-                      placeholder="ID Number"
-                      value={recoveryData.municipalId}
+                      placeholder="name@email.com"
+                      type="email"
+                      value={recoveryData.email}
                       disabled={loading}
-                      onChange={e => setRecoveryData({ ...recoveryData, municipalId: e.target.value })}
-                      className="w-full h-14 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
+                      onChange={e => setRecoveryData({ ...recoveryData, email: e.target.value })}
+                      className="w-full h-12 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
+                    />
+                  </div>
+
+                  <div className="border border-dashed border-slate-300 rounded-2xl p-4 bg-white space-y-2 text-left">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-black block">Upload Municipal ID Photo Scan (Required)</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={loading}
+                      onChange={e => {
+                        if (e.target.files && e.target.files[0]) {
+                          setRecoveryData({ ...recoveryData, municipalIdImage: e.target.files[0] });
+                        }
+                      }}
+                      className="w-full text-xs text-black file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2 text-left">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Registered Email</label>
-                  <input
-                    placeholder="name@email.com"
-                    type="email"
-                    value={recoveryData.email}
-                    disabled={loading}
-                    onChange={e => setRecoveryData({ ...recoveryData, email: e.target.value })}
-                    className="w-full h-14 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
-                  />
-                </div>
-
-                <div className="border border-dashed border-slate-300 rounded-2xl p-4 bg-white space-y-2 text-left">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-black block">Upload Municipal ID Photo Scan (Required)</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={loading}
-                    onChange={e => {
-                      if (e.target.files && e.target.files[0]) {
-                        setRecoveryData({ ...recoveryData, municipalIdImage: e.target.files[0] });
-                      }
-                    }}
-                    className="w-full text-xs text-black file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
-                  />
-                </div>
-
-                <div className="space-y-2 text-left">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Old / Current Password</label>
-                  <input
-                    placeholder="Enter previous password"
-                    type="password"
-                    value={recoveryData.oldPassword}
-                    disabled={loading}
-                    onChange={e => setRecoveryData({ ...recoveryData, oldPassword: e.target.value })}
-                    className="w-full h-14 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
-                  />
-                </div>
-
-                <div className="space-y-2 text-left">
-                  <div className="flex justify-between items-center px-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-black">New Password</label>
-                    {recoveryData.newPassword && (
-                      <span className={`text-[10px] font-black uppercase ${checkPasswordStrength(recoveryData.newPassword).color}`}>
-                        {checkPasswordStrength(recoveryData.newPassword).label}
-                      </span>
-                    )}
+                {/* SECTION: NEW PASSWORD SECURITY DEFINITION */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                    <Lock size={16} className="text-blue-600" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">2. New Password Definition</span>
                   </div>
-                  <input
-                    placeholder="Enter strong new password"
-                    type="password"
-                    value={recoveryData.newPassword}
-                    disabled={loading}
-                    onChange={e => setRecoveryData({ ...recoveryData, newPassword: e.target.value })}
-                    className="w-full h-14 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
-                  />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* NEW PASSWORD INPUT */}
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">New Password</label>
+                      <div className="relative">
+                        <input
+                          placeholder="••••••••••••"
+                          type={showPassword ? "text" : "password"}
+                          value={recoveryData.newPassword}
+                          disabled={loading}
+                          onChange={e => setRecoveryData({ ...recoveryData, newPassword: e.target.value })}
+                          className="w-full h-12 rounded-2xl bg-white border border-slate-300 pl-4 pr-10 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => setShowPassword(!showPassword)} 
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* CONFIRM NEW PASSWORD INPUT */}
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-black px-1">Confirm New Password</label>
+                      <input
+                        placeholder="••••••••••••"
+                        type={showPassword ? "text" : "password"}
+                        value={recoveryData.confirmPassword}
+                        disabled={loading}
+                        onChange={e => setRecoveryData({ ...recoveryData, confirmPassword: e.target.value })}
+                        className="w-full h-12 rounded-2xl bg-white border border-slate-300 px-4 text-sm font-bold text-black placeholder-slate-400 focus:bg-white focus:border-slate-500 outline-none transition-all disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+
+                  {/* STRENGTH PROGRESS BAR */}
+                  {recoveryData.newPassword && (
+                    <div className="space-y-1 px-1">
+                      <div className="flex justify-between items-center text-[9px] font-black uppercase text-slate-500 tracking-wider">
+                        <span>Password Strength</span>
+                        <span className={passwordStrengthScore >= 80 ? "text-emerald-600" : passwordStrengthScore >= 60 ? "text-amber-600" : "text-red-500"}>
+                          {passwordStrengthScore >= 100 ? "Fortified" : passwordStrengthScore >= 80 ? "Strong" : passwordStrengthScore >= 60 ? "Moderate" : "Weak"}
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-300 ${
+                            passwordStrengthScore >= 80 ? 'bg-emerald-500' : passwordStrengthScore >= 60 ? 'bg-amber-500' : 'bg-red-500'
+                          }`} 
+                          style={{ width: `${passwordStrengthScore}%` }} 
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SECURITY REQUIREMENTS BADGES */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-2 gap-2 text-left">
+                    <SecurityReq label="10+ Characters" met={securityMetrics.length} />
+                    <SecurityReq label="Uppercase Letter" met={securityMetrics.hasUpper} />
+                    <SecurityReq label="Lowercase Letter" met={securityMetrics.hasLower} />
+                    <SecurityReq label="Numeric Digit" met={securityMetrics.hasNumber} />
+                    <SecurityReq label="Special Symbol" met={securityMetrics.hasSymbol} />
+                    <SecurityReq label="Not Common Key" met={securityMetrics.notCommon} />
+                    <SecurityReq label="Passwords Match" met={securityMetrics.match} className="col-span-2 border-t border-slate-200 pt-2 mt-1" />
+                  </div>
                 </div>
 
                 <div className="pt-2 flex gap-3">
@@ -342,15 +405,17 @@ export default function RecoveryPage() {
                     variant="outline" 
                     disabled={loading}
                     onClick={() => navigate('/login', { replace: true })}
-                    className="w-1/2 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 text-black border border-slate-300 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                    className="w-1/2 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 text-black border border-slate-300 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <ChevronLeft size={16} /> Back to Login
+                    <ChevronLeft size={16} /> Cancel
                   </Button>
                   <Button 
                     type="button" 
-                    disabled={loading}
+                    disabled={loading || !isSecureEnough}
                     onClick={handleInspectorRecovery}
-                    className="w-1/2 h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 border border-slate-300 shadow-lg"
+                    className={`w-1/2 h-14 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 border border-slate-300 shadow-lg transition-all ${
+                      isSecureEnough ? 'bg-slate-900 hover:bg-slate-800 cursor-pointer' : 'bg-slate-400 cursor-not-allowed opacity-60'
+                    }`}
                   >
                     {loading ? <RefreshCcw size={16} className="animate-spin" /> : "Submit Request"}
                   </Button>
@@ -362,5 +427,14 @@ export default function RecoveryPage() {
         </div>
       </div>
     </Layout>
+  );
+}
+
+function SecurityReq({ label, met, className = "" }: { label: string; met: boolean; className?: string }) {
+  return (
+    <div className={`flex items-center gap-1.5 ${className}`}>
+      {met ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> : <AlertCircle size={12} className="text-slate-300 shrink-0" />}
+      <span className={`text-[9px] font-black uppercase tracking-tight ${met ? 'text-emerald-700' : 'text-slate-400'}`}>{label}</span>
+    </div>
   );
 }

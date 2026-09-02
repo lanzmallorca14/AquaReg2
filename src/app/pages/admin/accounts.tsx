@@ -17,6 +17,166 @@ import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
 import { useAquaReg } from '../../components/context/AquaRegCONTEXT';
 
+const MunicipalIdRecoveryImage = ({
+  imagePath,
+  supabase,
+}: {
+  imagePath: string;
+  supabase: any;
+}) => {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMunicipalId = async () => {
+      setLoading(true);
+      setError(false);
+      setImageUrl(null);
+
+      if (!imagePath) {
+        setLoading(false);
+        return;
+      }
+
+      let storagePath = String(imagePath).trim();
+
+      try {
+        // Handle a complete Supabase Storage URL saved in the database.
+        if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
+          const url = new URL(storagePath);
+          const pathname = decodeURIComponent(url.pathname);
+          const bucketMarker = "/id-scans/";
+          const bucketIndex = pathname.indexOf(bucketMarker);
+
+          if (bucketIndex !== -1) {
+            storagePath = pathname
+              .substring(bucketIndex + bucketMarker.length)
+              .replace(/^\/+/, "");
+          } else {
+            // If it is an unrelated URL, use it directly as a fallback.
+            if (!cancelled) {
+              setImageUrl(storagePath);
+            }
+            return;
+          }
+        }
+
+        // Handle values saved as id-scans/file.jpg.
+        if (storagePath.startsWith("id-scans/")) {
+          storagePath = storagePath.substring("id-scans/".length);
+        }
+
+        storagePath = storagePath.replace(/^\/+/, "");
+
+        if (!storagePath) {
+          throw new Error("Empty Municipal ID storage path.");
+        }
+
+        console.log("Recovery Municipal ID storage path:", storagePath);
+
+        // The id-scans bucket is private, so generate a temporary signed URL.
+        const { data, error: signedUrlError } = await supabase.storage
+          .from("id-scans")
+          .createSignedUrl(storagePath, 3600);
+
+        if (signedUrlError || !data?.signedUrl) {
+          console.error("Recovery Municipal ID signed URL error:", signedUrlError);
+          throw signedUrlError || new Error("No signed URL returned.");
+        }
+
+        if (!cancelled) {
+          setImageUrl(data.signedUrl);
+        }
+      } catch (err) {
+        console.error("Recovery Municipal ID image error:", err);
+        if (!cancelled) {
+          setError(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadMunicipalId();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imagePath]);
+
+  if (loading) {
+    return (
+      <div className="mt-3 flex justify-center bg-slate-50 rounded-2xl p-3 border border-slate-200">
+        <div className="w-full max-w-md h-48 rounded-xl border border-dashed border-slate-300 bg-slate-100 flex items-center justify-center">
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            Loading Uploaded ID...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !imageUrl) {
+    return (
+      <div className="mt-3 flex justify-center bg-slate-50 rounded-2xl p-3 border border-slate-200">
+        <div className="w-full max-w-md h-48 rounded-xl border border-dashed border-slate-300 bg-slate-100 flex flex-col items-center justify-center text-center">
+          <ShieldAlert size={30} className="text-slate-300 mb-2" />
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            Municipal ID Unavailable
+          </p>
+          <p className="text-[8px] text-slate-400 mt-1">
+            No accessible ID scan was found.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <p className="text-[9px] font-black uppercase text-slate-500">
+        Uploaded Municipal ID
+      </p>
+
+      {/* IMAGE PREVIEW - MATCHES CONFIRM REGISTRY */}
+      <div className="flex justify-center bg-slate-50 rounded-2xl p-3 border border-slate-200">
+        <img
+          src={imageUrl}
+          alt="Uploaded Municipal ID"
+          className="w-full max-w-md h-48 object-contain rounded-xl border border-slate-300 bg-white shadow-sm"
+          onLoad={() => {
+            console.log("Recovery Municipal ID image displayed successfully.");
+          }}
+          onError={(e) => {
+            console.error(
+              "RECOVERY MUNICIPAL ID IMAGE FAILED TO DISPLAY:",
+              e.currentTarget.src
+            );
+            setError(true);
+            setImageUrl(null);
+          }}
+        />
+      </div>
+
+      {/* VIEW BUTTON - SAME IDEA AS CONFIRM REGISTRY */}
+      <a
+        href={imageUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-full h-9 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all text-[9px] font-black uppercase tracking-wider"
+      >
+        <Eye size={13} />
+        View Uploaded ID Scan
+      </a>
+    </div>
+  );
+};
+
 export default function AccountsPage() {
   const { 
     inspectors = [], 
@@ -380,15 +540,11 @@ useEffect(() => {
                   <p className="font-black text-xs uppercase text-slate-900">{req.full_name}</p>
                   <p className="text-[10px] text-slate-500 font-bold">{req.inspector_email}</p>
                   <p className="text-[9px] text-slate-400">Municipal ID: <span className="font-bold">{req.municipal_id}</span></p>
-                  {req.municipal_id_image && (
-                    <a 
-                      href={req.municipal_id_image} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="inline-flex items-center gap-1 text-[9px] font-black text-blue-600 hover:underline mt-1"
-                    >
-                      <Eye size={12} /> View Uploaded ID Scan
-                    </a>
+                 {req.municipal_id_image && (
+                    <MunicipalIdRecoveryImage
+                      imagePath={req.municipal_id_image}
+                      supabase={supabase}
+                    />
                   )}
                 </div>
 

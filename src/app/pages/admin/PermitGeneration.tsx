@@ -47,6 +47,7 @@ interface VesselDataState {
   gearCategory: string;
   boat_builder_no: string;
   unitsInWords: string;
+  units?: string;
   permitFee?: string;
   yearBuilt: string;
   placeOfBuilt: string;
@@ -89,31 +90,60 @@ const numberToWords = (num: number): string => {
     "NINETY"
   ];
 
-  if(num < 20) return ones[num];
+  if (num < 20) return ones[num];
 
-  if(num < 100){
-    return tens[Math.floor(num/10)] + 
-    (num % 10 ? "-" + ones[num%10] : "");
+  if (num < 100) {
+    return (
+      tens[Math.floor(num / 10)] +
+      (num % 10 ? "-" + ones[num % 10] : "")
+    );
   }
 
-  if(num < 1000){
-    return ones[Math.floor(num/100)] + 
-    " HUNDRED " +
-    (num%100 ? numberToWords(num%100) : "");
+  if (num < 1000) {
+    return (
+      ones[Math.floor(num / 100)] +
+      " HUNDRED" +
+      (num % 100 ? " " + numberToWords(num % 100) : "")
+    );
+  }
+
+  if (num < 1000000) {
+    return (
+      numberToWords(Math.floor(num / 1000)) +
+      " THOUSAND" +
+      (num % 1000 ? " " + numberToWords(num % 1000) : "")
+    );
   }
 
   return num.toString();
 };
 
+const formatUnits = (value: string | number | null | undefined) => {
+  const normalized = value == null ? "" : String(value);
 
-const formatUnits = (value: string) => {
-  const number = Number(value);
+  // If the user deletes everything, clear the field completely
+  if (normalized.trim() === "") {
+    return "";
+  }
 
-  if (!number || number <= 0) return "";
+  // Extract digits only to safely parse values typed in inputs
+  const digitsOnly = normalized.replace(/\D/g, "");
 
-  const word = numberToWords(number);
+  // If backspacing removes all digits, clear the input
+  if (!digitsOnly) {
+    return "";
+  }
 
-  return `${number} (${word}) ${number === 1 ? "UNIT" : "UNITS"} OF`;
+  const number = Number(digitsOnly);
+
+  if (!Number.isFinite(number) || number <= 0) {
+    return "";
+  }
+
+  // Ensure integer value passed into numberToWords to prevent array index bugs
+  const word = numberToWords(Math.floor(number));
+
+  return `${word} (${number}) ${number === 1 ? "UNIT" : "UNITS"} OF`;
 };
 
 const formatMoney = (value:string) => {
@@ -264,6 +294,8 @@ useEffect(() => {
   loadCOI();
 
 },[]);
+
+
 
 
 
@@ -756,63 +788,135 @@ const handleExportWPS = async () => {
       id: "wps-export",
     });
 
-    const originalWidth = printElement.style.width;
-    const originalHeight = printElement.style.height;
-    const originalTransform = printElement.style.transform;
-
-    // Make the capture stable and prevent clipping.
-    printElement.style.transform = "none";
-
-    const isCertificate = isVesselType;
-
-    if (isCertificate) {
-      // Long bond / Legal-style certificate
-      printElement.style.width = "215.9mm";
-      printElement.style.height = "355.6mm";
-    } else {
-      // A4 Mayor's Permit
-      printElement.style.width = "210mm";
-      printElement.style.height = "297mm";
+    // ---------------------------------------------------------
+    // 1. WAIT FOR FONTS
+    // ---------------------------------------------------------
+    if ("fonts" in document) {
+      await document.fonts.ready;
     }
 
-    await new Promise(resolve => setTimeout(resolve, 150));
+    // ---------------------------------------------------------
+    // 2. WAIT FOR ALL IMAGES
+    // ---------------------------------------------------------
+    const images = Array.from(
+      printElement.querySelectorAll("img")
+    );
 
+    await Promise.all(
+      images.map((img) => {
+        if (img.complete) return Promise.resolve();
+
+        return new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      })
+    );
+
+    // Allow browser layout to settle.
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => resolve())
+      )
+    );
+
+    // ---------------------------------------------------------
+    // 3. GET THE ACTUAL RENDERED SIZE
+    // ---------------------------------------------------------
+    const rect = printElement.getBoundingClientRect();
+
+    const renderedWidth = Math.round(rect.width);
+    const renderedHeight = Math.round(rect.height);
+
+    if (!renderedWidth || !renderedHeight) {
+      throw new Error("Permit document has invalid dimensions.");
+    }
+
+    // ---------------------------------------------------------
+    // 4. CAPTURE EXACTLY WHAT IS CURRENTLY DISPLAYED
+    // ---------------------------------------------------------
     const canvas = await html2canvas(printElement, {
       scale: 2,
       useCORS: true,
+      allowTaint: false,
       backgroundColor: "#ffffff",
       logging: false,
-      width: printElement.scrollWidth,
-      height: printElement.scrollHeight,
+
+      width: renderedWidth,
+      height: renderedHeight,
+
+      windowWidth: renderedWidth,
+      windowHeight: renderedHeight,
+
+      scrollX: 0,
+      scrollY: 0,
+
+      onclone: (clonedDocument) => {
+        const clonedElement =
+          clonedDocument.getElementById("permit-document");
+
+        if (!clonedElement) return;
+
+        // IMPORTANT:
+        // Keep the exact dimensions of the displayed document.
+        clonedElement.style.transform = "none";
+        clonedElement.style.margin = "0";
+        clonedElement.style.boxSizing = "border-box";
+      },
     });
 
-    const orientation = "portrait";
+    // ---------------------------------------------------------
+    // 5. DETERMINE PAPER SIZE
+    // ---------------------------------------------------------
+    const isCertificate = isVesselType;
+
+    const pageWidth = isCertificate
+      ? 215.9
+      : 210;
+
+    const pageHeight = isCertificate
+      ? 355.6
+      : 297;
 
     const pdf = new jsPDF({
-      orientation,
+      orientation: "portrait",
       unit: "mm",
-      format: isCertificate ? [215.9, 355.6] : "a4",
+      format: [pageWidth, pageHeight],
       compress: true,
     });
 
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
+    // ---------------------------------------------------------
+    // 6. FIT IMAGE TO PAPER WITHOUT DISTORTION
+    // ---------------------------------------------------------
+    const canvasRatio = canvas.width / canvas.height;
+    const pageRatio = pageWidth / pageHeight;
 
-    const imageRatio = canvas.width / canvas.height;
+    let imageWidth: number;
+    let imageHeight: number;
 
-    let imageWidth = pageWidth;
-    let imageHeight = imageWidth / imageRatio;
-
-    if (imageHeight > pageHeight) {
+    if (canvasRatio > pageRatio) {
+      // Wider than page
+      imageWidth = pageWidth;
+      imageHeight = imageWidth / canvasRatio;
+    } else {
+      // Taller than page
       imageHeight = pageHeight;
-      imageWidth = imageHeight * imageRatio;
+      imageWidth = imageHeight * canvasRatio;
     }
 
     const x = (pageWidth - imageWidth) / 2;
     const y = (pageHeight - imageHeight) / 2;
 
+    // ---------------------------------------------------------
+    // 7. ADD IMAGE
+    // ---------------------------------------------------------
+    const imageData = canvas.toDataURL(
+      "image/jpeg",
+      0.98
+    );
+
     pdf.addImage(
-      canvas.toDataURL("image/jpeg", 0.95),
+      imageData,
       "JPEG",
       x,
       y,
@@ -822,17 +926,14 @@ const handleExportWPS = async () => {
       "FAST"
     );
 
-    const fileName =
-      isCertificate
-        ? `Certificate-${data.certificateNo || data.registrationId || "Permit"}.pdf`
-        : `Mayors-Permit-${data.officialNo || data.registrationId || "Permit"}.pdf`;
+    // ---------------------------------------------------------
+    // 8. FILE NAME
+    // ---------------------------------------------------------
+    const fileName = isCertificate
+      ? `Certificate-${data.certificateNo || data.registrationId || "Permit"}.pdf`
+      : `Mayors-Permit-${data.officialNo || data.registrationId || "Permit"}.pdf`;
 
     pdf.save(fileName);
-
-    // Restore layout.
-    printElement.style.width = originalWidth;
-    printElement.style.height = originalHeight;
-    printElement.style.transform = originalTransform;
 
     toast.success("WPS/PDF exported successfully.", {
       id: "wps-export",
@@ -1145,33 +1246,28 @@ return (
     </div>
 
 
-  {subType === "FISHING GEAR" && (
+ {subType === "FISHING GEAR" && (
   <div className="space-y-3 border-t pt-4">
-
     <Label className="text-[9px] font-black uppercase">
       Units (In Words)
     </Label>
 
     <Input
-      type="number"
+      type="text"
       name="unitsInWords"
-      value={
-        data.unitsInWords
-          ? data.unitsInWords.match(/^\d+/)?.[0] || ""
-          : ""
-      }
+      value={data.unitsInWords || ""}
       onChange={(e) => {
-        const formatted = formatUnits(e.target.value);
+        const val = e.target.value;
+        const formatted = typeof formatUnits === "function" ? formatUnits(val) : val;
 
-        setData(prev => ({
+        setData((prev) => ({
           ...prev,
-          unitsInWords: formatted
+          unitsInWords: formatted,
         }));
       }}
-      placeholder="15"
+      placeholder="e.g., 15 (Fifteen)"
       className="h-10 font-bold bg-slate-50 border-slate-200"
     />
-
   </div>
 )}
 
@@ -1194,6 +1290,31 @@ return (
   }
   placeholder="100,000,000"
 />
+
+  </div>
+)}
+
+{/* PANGULONG / RING NET COUNT */}
+{subType === "PANGULONG" && (
+  <div className="space-y-3 border-t pt-4">
+
+    <Label className="text-[9px] font-black uppercase">
+      Number of Ring Nets
+    </Label>
+
+    <Input
+      name="numberOfBoats"
+      type="number"
+      min="1"
+      value={data.numberOfBoats || ""}
+      onChange={handleChange}
+      placeholder="1"
+      className="h-10 font-bold bg-slate-50 border-slate-200"
+    />
+
+    <p className="text-[9px] text-slate-400 font-bold uppercase">
+      Enter the number of Ring Nets (Pangulong).
+    </p>
 
   </div>
 )}
@@ -1325,9 +1446,9 @@ return (
       <main className="flex-1 p-8 md:p-12 overflow-y-auto flex justify-center bg-slate-200">
         <div className="shadow-2xl print:shadow-none transition-all duration-500 bg-white">
           {isVesselType ? (
-            /* LAYOUT A: CERTIFICATE OF NUMBER */
+        /* LAYOUT A: CERTIFICATE OF NUMBER */
 <div 
- id="permit-document"
+  id="permit-document"
   className="bg-white text-black font-sans print:m-0 overflow-hidden flex flex-col justify-between"
   style={{
     width: '215.9mm',
@@ -1403,7 +1524,6 @@ return (
       <span>
         THIS IS TO CERTIFY THAT Mr./Mrs. <span className="underline decoration-2 underline-offset-2 px-3 font-black">{data.ownerName || 'UNKNOWN'}</span> of barangay <span className="underline decoration-2 underline-offset-2 px-3 font-black">{data.barangay || 'N/A'}</span> Municipality of Romblon in the Province of Romblon is the OWNER/OPERATOR.
       </span>
-
     </div>
 
     {/* DIMENSIONS TABLE */}
@@ -1475,164 +1595,196 @@ return (
       </div>
       <div className="space-y-2.5 pl-4 border-l-[2px] border-black/10 flex flex-col justify-center">
         <div className="flex gap-2 text-red-700 items-center"><span>EXPIRATION DATE:</span><span className="border-b-2 border-red-700 flex-1 text-center font-black text-[12.5px]">{expirationDate || 'N/A'}</span></div>
-<div className="flex gap-2 text-blue-800 items-center">
-  <span>RIG NO.:</span>
-  <span className="border-b-2 border-blue-800 flex-1 text-center font-bold text-[12.5px]">
-    {data.officialNo && data.orNumber 
-      ? `RM-${data.officialNo.replace(/^(RM|OR)-?/i, '')}-${data.orNumber.replace(/^(RM|OR)-?/i, '')}` 
-      : data.officialNo 
-      ? `RM-${data.officialNo.replace(/^(RM|OR)-?/i, '')}` 
-      : data.orNumber 
-      ? `RM-${data.orNumber.replace(/^(RM|OR)-?/i, '')}` 
-      : 'N/A'}
-  </span>
+        <div className="flex gap-2 text-blue-800 items-center">
+          <span>RIG NO.:</span>
+          <span className="border-b-2 border-blue-800 flex-1 text-center font-bold text-[12.5px]">
+            {data.officialNo && data.orNumber 
+              ? `RM-${data.officialNo.replace(/^(RM|OR)-?/i, '')}-${data.orNumber.replace(/^(RM|OR)-?/i, '')}` 
+              : data.officialNo 
+              ? `RM-${data.officialNo.replace(/^(RM|OR)-?/i, '')}` 
+              : data.orNumber 
+              ? `RM-${data.orNumber.replace(/^(RM|OR)-?/i, '')}` 
+              : 'N/A'}
+          </span>
+        </div>
+      </div>
+      {/* FOOTER SLOGAN */}
+<div className="text-center pt-2 pb-1">
+  <p className="text-[10px] font-black uppercase tracking-wide font-sans">
+    ***“KATAHUM NG ROMBLON, IPAKADAKO NATON”***
+  </p>
 </div>
+    </div>
+
+  </div>
+</div>
+) : (
+/* LAYOUT B: MAYOR'S PERMIT */
+<div 
+  id="permit-document"
+  className="bg-white text-black font-serif print:m-0 relative overflow-hidden" 
+  style={{ width: '8.27in', height: '11.69in', padding: '0.8in', boxSizing: 'border-box' }}
+>
+  <div className="text-center space-y-1 mb-12">
+    <p className="text-sm font-bold uppercase">Republic of the Philippines</p>
+    <p className="text-sm font-bold uppercase">Province of Romblon</p>
+    <p className="text-xs italic text-slate-500">- Municipality of Romblon -</p>
+    <h2 className="text-xl font-black tracking-tight mt-4 uppercase border-y border-black py-2">OFFICE OF THE MAYOR</h2>
+  </div>
+
+  <div className="absolute top-[0.8in] right-[0.8in] text-right">
+    <div className="text-xs font-black border-2 border-black px-3 py-1 uppercase rounded-sm flex items-center gap-2 bg-white">
+      <FileText size={12}/> Permit No: {data.officialNo || ''}
+    </div>
+  </div>
+
+  <div className="text-center mt-12 relative">
+    <h1 className="text-6xl font-black tracking-[0.2em] text-slate-900 leading-none">MAYOR'S PERMIT</h1>
+    <div className="flex justify-center -mt-8">
+      <span className="text-[160px] font-black opacity-[0.03] text-blue-900 leading-none select-none italic">2026</span>
+    </div>
+  </div>
+
+  <div className="w-full text-center space-y-8 -mt-16 relative z-10">
+    <p className="text-lg font-bold italic underline underline-offset-4 tracking-wide">To Whom It May Concern:</p>
+    
+    <div className="pt-6">
+      <p className="text-md uppercase font-bold text-slate-500 tracking-widest leading-none">This permit is hereby granted to</p>
+      <p className="text-4xl font-black uppercase mt-4 border-b-[3px] border-black inline-block px-12 italic leading-tight">
+        {data.ownerName || 'UNKNOWN'}
+      </p>
+    </div>
+
+    <div className="space-y-4">
+      <p className="text-md font-medium max-w-2xl mx-auto leading-relaxed italic">
+        To engage in fishing operations within the Municipal Waters of Romblon with
+Fishing gear/s specified herein:
+      </p>
+
+      <div className="py-2">
+      {/* ASSET NAME + UNITS DISPLAY */}
+{subType === "PAYAO/BALSA" ? (
+  <div className="text-center">
+    <p className="text-3xl font-black uppercase italic text-black">
+      {data.numberOfBoats && Number(data.numberOfBoats) > 0
+        ? `${formatUnits(data.numberOfBoats)} PAYAO/BALSA`
+        : "PAYAO/BALSA"}
+    </p>
+
+    {data.boatName && (
+      <p className="mt-5 text-xl font-black uppercase italic whitespace-nowrap">
+        NAME: {data.boatName}
+      </p>
+    )}
+  </div>
+
+) : subType === "PANGULONG" ? (
+  <div className="flex justify-center items-center gap-3 flex-wrap">
+    <span className="text-3xl font-black italic uppercase text-black">
+      {formatUnits(data.numberOfBoats || "1")}
+    </span>
+
+    <p className="text-3xl font-black uppercase italic text-black">
+      RING NET (PANGULONG)
+    </p>
+  </div>
+
+) : subType === "FISHING GEAR" ? (
+  <div className="flex justify-center items-center gap-3 flex-wrap">
+    <span className="text-3xl font-black italic uppercase">
+      {data.unitsInWords || (data.units ? `${data.units} UNITS` : '')}
+    </span>
+
+    <p className="text-3xl font-black uppercase italic text-black">
+      {data.gearCategory || "FISHING GEAR"}
+    </p>
+  </div>
+
+) : (
+  <div className="flex justify-center items-center gap-3 flex-wrap">
+    <p className="text-3xl font-black uppercase underline decoration-[3px] underline-offset-[12px] italic text-blue-900">
+      {data.vesselName || "UNNAMED"}
+    </p>
+  </div>
+)}
+
+        {/* ISSUANCE DATE */}
+        <p className="text-md pt-10 italic">
+          Issued this{" "}
+          <span className="font-black border-b border-black px-4">
+            {(() => {
+              const day = new Date().getDate();
+              const s = ["TH", "ST", "ND", "RD"];
+              const v = day % 100;
+              return day + (s[(v - 20) % 10] || s[v] || s[0]);
+            })()}
+          </span>{" "}
+          day of{" "}
+          <span className="font-black border-b border-black px-4 uppercase mx-1">
+            {new Date().toLocaleString('default', { month: 'long' })}
+          </span>{" "}
+          at Romblon, Romblon.
+        </p>
       </div>
     </div>
 
-  </div>
-</div>
-          ) : (
-            /* LAYOUT B: MAYOR'S PERMIT */
-      <div 
-       id="permit-document"
-      className="bg-white text-black font-serif print:m-0 relative overflow-hidden" style={{ width: '8.27in', height: '11.69in', padding: '0.8in', boxSizing: 'border-box' }}>
-
-              <div className="text-center space-y-1 mb-12">
-                <p className="text-sm font-bold uppercase">Republic of the Philippines</p>
-                <p className="text-sm font-bold uppercase">Province of Romblon</p>
-                <p className="text-xs italic text-slate-500">- Municipality of Romblon -</p>
-                <h2 className="text-xl font-black tracking-tight mt-4 uppercase border-y border-black py-2">OFFICE OF THE MAYOR</h2>
-              </div>
-
-              <div className="absolute top-[0.8in] right-[0.8in] text-right">
-                <div className="text-xs font-black border-2 border-black px-3 py-1 uppercase rounded-sm flex items-center gap-2 bg-white">
-                  <FileText size={12}/> Permit No: {data.officialNo || ''}
-                </div>
-              </div>
-
-              <div className="text-center mt-12 relative">
-                <h1 className="text-6xl font-black tracking-[0.2em] text-slate-900 leading-none">MAYOR'S PERMIT</h1>
-                <div className="flex justify-center -mt-8">
-                  <span className="text-[160px] font-black opacity-[0.03] text-blue-900 leading-none select-none italic">2026</span>
-                </div>
-              </div>
-
-              <div className="w-full text-center space-y-8 -mt-16 relative z-10">
-                <p className="text-lg font-bold italic underline underline-offset-4 tracking-wide">To Whom It May Concern:</p>
-                
-                <div className="pt-6">
-                  <p className="text-md uppercase font-bold text-slate-500 tracking-widest leading-none">This permit is hereby granted to</p>
-                  <p className="text-4xl font-black uppercase mt-4 border-b-[3px] border-black inline-block px-12 italic leading-tight">
-                    {data.ownerName || 'UNKNOWN'}
-                  </p>
-                </div>
-
-               <div className="space-y-4">
-  <p className="text-md font-medium max-w-2xl mx-auto leading-relaxed italic">
-    To engage in legitimate fishing operations within the Municipal Waters of Romblon using the specified asset category:
-  </p>
-
-  <div className="py-2">
-
-    {/* ASSET NAME + UNITS */}
-    <div className="flex justify-center items-center gap-3 flex-wrap">
-
-{subType === "PAYAO/BALSA" ? (
-  <p className="text-3xl font-black uppercase underline decoration-[3px] underline-offset-[12px] italic text-blue-900">
-    {data.vesselName || "PAYAO/BALSA"}
-  </p>
-) : (
-  <>
-    {subType === "FISHING GEAR" && data.unitsInWords && (
-      <span className="text-3xl font-black italic uppercase">
-        {data.unitsInWords}
-      </span>
-    )}
-
-    <p className="text-3xl font-black uppercase underline decoration-[3px] underline-offset-[12px] italic text-blue-900">
-      {subType === "FISHING GEAR"
-        ? data.gearCategory
-        : data.vesselName || "UNNAMED"}
-    </p>
-  </>
-)}
-
-    
-    </div>
-
-
-    {/* DATE */}
-    <p className="text-md pt-10 italic">
-      Issued this 
-      <span className="font-black border-b border-black px-4">
-        {new Date().getDate()}TH
-      </span> 
-      day of 
-      <span className="font-black border-b border-black px-4 uppercase mx-1">
-        {new Date().toLocaleString('default', { month: 'long' })}
-      </span> 2026.
-    </p>
-
-  </div>
-</div>
+    {/* ORDINANCE TEXT */}
 
 <div className="max-w-xl mx-auto space-y-2 pt-0 -mt-8 text-center text-xs font-bold font-sans uppercase tracking-tighter leading-relaxed">
 
-  {/* UNIT DISPLAY FOR GEAR / PAYAO */}
+  {subType === "PANGULONG" ? (
+    <p className="text-center text-sm font-serif leading-relaxed">
+      For the period ending the year 2026 pursuant to the provisions of
+      Municipal Ordinance No. 01-2023 amending Section 61 of Ordinance No.
+      12-2006 otherwise known as the Comprehensive Municipal Fishery
+      Ordinance and Ordinance No. 13-2025.
+    </p>
 
-
-
-  {/* ORDINANCE TEXT */}
-  {subType === "FISHING GEAR" && (
+  ) : subType === "FISHING GEAR" || subType === "PAYAO/BALSA" ? (
     <p>
-      For the period ending the year 2026
-      <br/>
-      pursuant to the provisions of Municipal
-      <br/>
-      Ordinance No. 12-2006 otherwise known as the
-      <br/>
+      For the period ending the year 2026<br />
+      pursuant to the provisions of Municipal Ordinance No. 01 -2023 amending<br />
+      Section 61 of Ordinance No. 12- 2006 otherwise known as the<br />
       Comprehensive Municipal Fishery Ordinance.
     </p>
-  )}
 
-
-  {subType === "PAYAO/BALSA" && (
+  ) : (
     <p>
-      For the period ending the year 2026
-      <br/>
-      pursuant to the provisions of Municipal Ordinance No. 1-2023 amending
-      <br/>
-      Section 61 of Ordinance No. 12-2006 otherwise known as the
-      <br/>
-      Comprehensive Municipal Fishery Ordinance.
+      For the period ending the year 2026<br />
+      pursuant to the provisions of Municipal Ordinance No. 01 -2023 amending<br />
+      Section 61 of Ordinance No. 12- 2006 otherwise known as the<br />
+      Comprehensive Municipal Fishery Ordinance and Ordinance No. 13-2025.
     </p>
   )}
-
-
 
 </div>
-              </div>
-
-              <div className="absolute bottom-[0.8in] left-[0.8in] flex items-end gap-12 text-xs font-black uppercase font-sans">
-                <div className="space-y-1">
-                   <p className="flex justify-between w-48 border-b border-slate-100 pb-1">
-                    <span>PERMIT FEE:</span> <span className="text-blue-600">Php {data.permitFee || 'N/A'}</span>
-                  </p>
-                  <p className="flex justify-between w-48 border-b border-slate-100 pb-1">
-                    <span>O.R. NO.</span> <span className="text-blue-600">{data.orNumber || 'N/A'}</span>
-                  </p>
-                  <p className="flex justify-between w-48">
-                    <span>DATE</span> <span>{data.paymentDate || 'N/A'}</span>
-                  </p>
-                </div>
-               <div className="pb-1 ml-50">
- <p className="text-[10px] text-red-700 font-black">
-    EXPIRES: {expirationDate || ''}
+</div>
+  {/* FOOTER / PAYMENT INFO */}
+  <div className="absolute bottom-[0.8in] left-[0.8in] flex items-end gap-12 text-xs font-black uppercase font-sans">
+    <div className="space-y-1">
+      <p className="flex justify-between w-48 border-b border-slate-100 pb-1">
+        <span>PERMIT FEE:</span> <span className="text-blue-600">Php {data.permitFee || 'N/A'}</span>
+      </p>
+      <p className="flex justify-between w-48 border-b border-slate-100 pb-1">
+        <span>O.R. NO.</span> <span className="text-blue-600">{data.orNumber || 'N/A'}</span>
+      </p>
+      <p className="flex justify-between w-48">
+        <span>DATE</span> <span>{data.paymentDate || 'N/A'}</span>
+      </p>
+    </div>
+    <div className="pb-1 ml-50">
+      <p className="text-[10px] text-red-700 font-black">
+        EXPIRES: {expirationDate || ''}
+      </p>
+    </div>
+  </div>
+  {/* FOOTER SLOGAN */}
+<div className="absolute bottom-[0.25in] left-0 right-0 text-center">
+  <p className="text-[10px] font-black uppercase tracking-wide font-sans">
+    ***“KATAHUM NG ROMBLON, IPAKADAKO NATON”***
   </p>
 </div>
-              </div>
-            </div>
+</div>
           )}
         </div>
       </main>

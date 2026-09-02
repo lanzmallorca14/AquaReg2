@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 import { Badge } from '../../components/ui/badge';
 import { toast } from 'sonner'; 
 import { 
-  CheckCircle2, UploadCloud, Trash2, RefreshCw,
+  CheckCircle2, UploadCloud, Trash2, RefreshCw, Eye,
   ShieldAlert, Ship, Anchor, Search, AlertTriangle, RotateCcw
 } from 'lucide-react';
 import { useAquaData } from '../../components/context/AquaRegCONTEXT';
@@ -824,45 +824,48 @@ if (
                         />
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-slate-900 rounded-2xl p-5 text-center shadow-lg">
-                          <p className="text-[9px] font-black uppercase text-blue-400 mb-1">Gross Tonnage</p>
-                          <p className="text-3xl font-black text-white italic tracking-tighter">
-                            {f.grossTonnage}
-                            <span className="text-[10px] not-italic text-slate-500"> GT</span>
-                          </p>
-                        </div>
-                        <div className="bg-slate-900 rounded-2xl p-5 text-center shadow-lg">
-                          <p className="text-[9px] font-black uppercase text-emerald-400 mb-1">Net Tonnage</p>
-                          <p className="text-3xl font-black text-white italic tracking-tighter">
-                            {f.netTonnage}
-                            <span className="text-[10px] not-italic text-slate-500"> NT</span>
-                          </p>
-                        </div>
-                      </div>
-                          
-                      <div className="p-4 bg-slate-50 rounded-2xl grid grid-cols-3 gap-3">
-                        {['length', 'width', 'depth'].map(d => (
-                       <div key={d} className="flex flex-col items-center justify-between p-3 bg-zinc-900 hover:bg-zinc-800 rounded-xl border-2 border-zinc-700 shadow-md transition-all">
-  <div className="flex items-center gap-1">
-    <Label className="text-xs font-black uppercase tracking-widest text-amber-400">
-      {d}
-    </Label>
-    <span className="text-[10px] font-extrabold text-cyan-400 bg-cyan-950/60 px-1.5 py-0.5 rounded-md border border-cyan-800/50">
-      m
-    </span>
+    <div className="grid grid-cols-2 gap-4">
+  <div className="bg-white rounded-2xl p-5 text-center shadow-lg border border-slate-100">
+    <p className="text-[9px] font-black uppercase text-blue-600 mb-1">Gross Tonnage</p>
+    <p className="text-3xl font-black text-slate-900 italic tracking-tighter">
+      {f.grossTonnage}
+      <span className="text-[10px] not-italic text-slate-400"> GT</span>
+    </p>
   </div>
-
-  <Input 
-    type="number" 
-    step="0.01" 
-    value={f[d as keyof typeof f] as string} 
-    onChange={e => up(d, e.target.value)} 
-    className="h-10 w-full text-center text-base font-black text-emerald-400 bg-zinc-950 border-2 border-zinc-700 rounded-lg focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:border-emerald-400 transition-all"
-  />
+  <div className="bg-white rounded-2xl p-5 text-center shadow-lg border border-slate-100">
+    <p className="text-[9px] font-black uppercase text-blue-500 mb-1">Net Tonnage</p>
+    <p className="text-3xl font-black text-slate-900 italic tracking-tighter">
+      {f.netTonnage}
+      <span className="text-[10px] not-italic text-slate-400"> NT</span>
+    </p>
+  </div>
 </div>
-                        ))}
-                      </div>
+
+<div className="p-4 bg-slate-50/80 rounded-2xl grid grid-cols-3 gap-3 mt-4">
+  {['length', 'width', 'depth'].map((d) => (
+    <div
+      key={d}
+      className="flex flex-col items-center justify-between p-3 bg-white hover:bg-blue-50/40 rounded-xl border border-blue-100 shadow-sm transition-all"
+    >
+      <div className="flex items-center gap-1 mb-2">
+        <Label className="text-xs font-black uppercase tracking-widest text-slate-700">
+          {d}
+        </Label>
+        <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-200">
+          m
+        </span>
+      </div>
+
+      <Input
+        type="number"
+        step="0.01"
+        value={f[d as keyof typeof f] as string}
+        onChange={(e) => up(d, e.target.value)}
+        className="h-10 w-full text-center text-base font-black text-black bg-slate-50 border border-black rounded-lg focus-visible:ring-2 focus-visible:ring-black focus-visible:border-black transition-all"
+      />
+    </div>
+  ))}
+</div>
                     </>
                   )}
                 </Card>
@@ -880,34 +883,112 @@ if (
               </div>
             )}
 
-            <Card className="bg-slate-900 p-5 text-white rounded-3xl space-y-4 shadow-xl">
-              <p className="text-[9px] font-black uppercase text-blue-400 border-b border-white/10 pb-2">Document Scans</p>
-              {activeDocKeys.map(key => (
-                <div key={key} className="space-y-1">
-                  <Label className="text-[7px] font-black uppercase opacity-40">{key.replace(/([A-Z])/g, ' $1').replace('bfar', 'BFAR')}</Label>
-                  {f.requirements[key] ? (
-                    <div className="relative rounded-xl overflow-hidden aspect-video border border-white/10 group">
-                      <img src={f.requirements[key]!} className="w-full h-full object-cover" alt={key}/>
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-3 transition-opacity">
-                        <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 p-2 rounded-lg text-white">
-                          <RefreshCw size={14}/>
-                          <input type="file" onChange={e => processFile(e, key)} className="hidden" accept="image/*"/>
-                        </label>
-                        <button onClick={() => handleRequirementChange(key, null)} className="p-2 bg-red-600 hover:bg-red-700 rounded-lg text-white">
-                          <Trash2 size={14}/>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <label className="border-2 border-dashed border-white/20 hover:border-blue-500 rounded-2xl aspect-video flex flex-col items-center justify-center cursor-pointer bg-white/5 transition-all group">
-                      <UploadCloud size={20} className="text-white/40 group-hover:text-blue-500 mb-1"/>
-                      <span className="text-[8px] font-black uppercase text-white/40 group-hover:text-blue-500">Upload Scan</span>
-                      <input type="file" onChange={e => processFile(e, key)} className="hidden" accept="image/*"/>
-                    </label>
-                  )}
+    <div className="space-y-3">
+  {/* Header */}
+  <div className="flex items-center gap-2 border-b-2 border-black pb-2">
+    <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+    <p className="text-[10px] font-black uppercase tracking-wider text-black">
+      Document Scans
+    </p>
+  </div>
+
+  {/* Horizontal / Landscape Document Items */}
+  <div className="space-y-2">
+    {activeDocKeys.map((key) => {
+      const labelText = key.replace(/([A-Z])/g, ' $1').replace('bfar', 'BFAR');
+      const fileUrl = f.requirements[key];
+
+      return (
+        <div key={key} className="space-y-1">
+          <Label className="text-[8px] font-black uppercase text-slate-600 tracking-wider">
+            {labelText}
+          </Label>
+
+          {fileUrl ? (
+            /* Uploaded State - Horizontal Landscape Bar */
+            <div className="flex items-center justify-between p-2.5 bg-white border-2 border-black rounded-xl shadow-sm gap-3">
+              <div className="flex items-center gap-3 overflow-hidden">
+                {/* Thumbnail Preview */}
+                <div className="w-16 h-10 flex-shrink-0 rounded-lg overflow-hidden border border-black bg-slate-100">
+                  <img
+                    src={fileUrl}
+                    className="w-full h-full object-cover"
+                    alt={key}
+                  />
                 </div>
-              ))}
-            </Card>
+                {/* File Name / Identifier Display */}
+                <div className="truncate">
+                  <p className="text-xs font-bold text-black truncate">
+                    {fileUrl.split('/').pop() || `${key}-scan.jpg`}
+                  </p>
+                  <span className="text-[9px] font-semibold text-blue-600 uppercase">
+                    Uploaded
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* View Image Button */}
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 bg-slate-100 hover:bg-slate-200 text-black rounded-lg transition-colors border border-black flex items-center justify-center"
+                  title="View Document"
+                >
+                  <Eye size={14} />
+                </a>
+
+                {/* Replace File Button */}
+                <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 p-2 rounded-lg text-white transition-colors flex items-center justify-center">
+                  <RefreshCw size={14} />
+                  <input
+                    type="file"
+                    onChange={(e) => processFile(e, key)}
+                    className="hidden"
+                    accept="image/*"
+                  />
+                </label>
+
+                {/* Delete Button */}
+                <button
+                  onClick={() => handleRequirementChange(key, null)}
+                  className="p-2 bg-red-600 hover:bg-red-700 rounded-lg text-white transition-colors flex items-center justify-center"
+                  type="button"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Empty Upload State - Wide Landscape Dropzone */
+            <label className="flex items-center justify-between p-3 border-2 border-dashed border-black hover:border-blue-600 bg-white hover:bg-blue-50/50 rounded-xl cursor-pointer transition-all group">
+              <div className="flex items-center gap-2.5">
+                <UploadCloud
+                  size={18}
+                  className="text-black group-hover:text-blue-600 transition-colors"
+                />
+                <span className="text-xs font-bold text-slate-500 group-hover:text-blue-600 transition-colors">
+                  No file selected
+                </span>
+              </div>
+              <span className="text-[9px] font-black uppercase text-white bg-black group-hover:bg-blue-600 px-3 py-1.5 rounded-lg transition-colors">
+                Upload Scan
+              </span>
+              <input
+                type="file"
+                onChange={(e) => processFile(e, key)}
+                className="hidden"
+                accept="image/*"
+              />
+            </label>
+          )}
+        </div>
+      );
+    })}
+  </div>
+</div>
 
             <Button 
               disabled={errs.length > 0 || s.proc === 1}
