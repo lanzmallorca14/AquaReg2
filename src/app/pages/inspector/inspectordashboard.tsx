@@ -13,17 +13,45 @@ export default function InspectorOverview() {
   const navigate = useNavigate();
   const { currentUser } = useAquaAuth();
   const { Vessels = [] } = useAquaData();
-  const myName = currentUser?.name || "";
+  const myInspectorId = String(
+  currentUser?.idNumber || currentUser?.id || ""
+).toUpperCase();
+
 
   // --- DATA PROCESSING LOGIC ---
   const stats = useMemo(() => {
-    // Exact schema tracking based on your context's Vessel interface
-    const myTasks = Vessels.filter(v => v.assigned_inspector === myName);
-    const verified = myTasks.filter(v => v.status === 'Passed').length;
-    
-    // Aligned to official context Vessel status types
-    const pending = myTasks.filter(v => ['Scheduled', 'Pending', 'To Follow'].includes(v.status)).length;
-    const rate = myTasks.length > 0 ? Math.round((verified / myTasks.length) * 100) : 0;
+  const myInspectorId = String(
+    currentUser?.idNumber || currentUser?.id || ""
+  ).toUpperCase();
+
+  // ONLY vessels assigned to this inspector
+  const myTasks = Vessels.filter(v => {
+    const assignedInspector = String(
+      v.assigned_inspector || ""
+    ).toUpperCase();
+
+    return (
+      assignedInspector !== "" &&
+      assignedInspector === myInspectorId
+    );
+  });
+
+  const verified = myTasks.filter(
+    v => String(v.status).toUpperCase() === "PASSED"
+  ).length;
+
+  const pending = myTasks.filter(v =>
+    ["SCHEDULED", "PENDING", "TO FOLLOW"].includes(
+      String(v.status).toUpperCase()
+    )
+  ).length;
+
+  const rate =
+    myTasks.length > 0
+      ? Math.round((verified / myTasks.length) * 100)
+      : 0;
+
+  // rest of your existing code...
 
     // Highest Barangay Registration density logic
     const barangayCounts: Record<string, number> = {};
@@ -46,7 +74,7 @@ export default function InspectorOverview() {
       .slice(0, 4);
 
     return { total: myTasks.length, verified, pending, rate, brgyData, recent };
-  }, [Vessels, myName]);
+  }, [Vessels, myInspectorId]);
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] font-sans text-slate-900 pb-20">

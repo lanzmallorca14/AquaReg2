@@ -113,14 +113,14 @@ interface AquaRegContextType {
   addVessel: (vData: any) => Promise<Vessel | null>;
   updateVessel: (id: string, data: Partial<Vessel>) => Promise<boolean>;
   updateVesselStatus: (id: string, newStatus: Vessel['status']) => Promise<void>;
-  deleteVessel: (id: string) => Promise<void>;
+  deleteVessel: (id: string) => Promise<boolean>; 
   inspectors: Inspector[];
   requestRegistration: (data: any, userId: string, idFile?: File | Blob, signatureFile?: File | Blob | string) => Promise<boolean>; 
   updateInspectorStatus: (id: string, status: Inspector['status']) => Promise<void>;
   deleteInspector: (id: string) => Promise<void>;
   approveVessel: (id: string, adminOrInspectorName: string, remarks?: string) => Promise<boolean>;
   completeInspection: (id: string, orNumber: string, remarks?: string) => Promise<boolean>; // <-
-  removeVessel: (id: string) => Promise<void>; 
+  removeVessel: (id: string) => Promise<boolean>; 
   scheduleInspection: (id: string, inspectorIdNumber: string, dateStr: string) => Promise<any>;
   finalizeRegistry: (id: string, orNumber: string, date: string, remarks?: string) => Promise<boolean>;
   getExpirationStatus: (expiryDate: string | undefined) => ExpirationStatus;
@@ -799,9 +799,13 @@ await db.add("syncQueue", {
     }
   };
 
-  const deleteVessel = async (id: string) => {
-    setVessels(prev => prev.filter(v => v.id !== id));
+ const deleteVessel = async (id: string) => {
+  // Optimistic UI update: Remove from React state immediately
+  setVessels((prev: any[]) =>
+    prev.filter((v: any) => String(v.id) !== String(id))
+  );
 
+  try {
     if (navigator.onLine) {
       const { error } = await supabase.from('Vessels').delete().eq('id', id);
       if (error) throw error;
@@ -819,7 +823,13 @@ await db.add("syncQueue", {
         console.warn("Offline DB write skipped:", e);
       }
     }
-  };
+
+    return true;
+  } catch (error) {
+    console.error('deleteVessel error:', error);
+    throw error;
+  }
+};
 
   const approveVessel = async (id: string, name: string, remarks?: string): Promise<boolean> => {
     return await updateVessel(id, { status: 'Passed', assigned_inspector: name, remarks });
@@ -924,7 +934,7 @@ await db.add("syncQueue", {
     }
   };
 
-  const deleteInspector = async (id: string) => {
+  const deleteInspector = async (id: string): Promise<void> => {
     setInspectors(prev => prev.filter(ins => ins.id !== id));
 
     if (navigator.onLine) {
@@ -949,8 +959,8 @@ await db.add("syncQueue", {
   return (
     <AquaRegContext.Provider value={{ 
       supabase, currentUser, setCurrentUser, loading, authInitialized, login, logout, resetPassword, Vessels, 
-      addVessel, updateVessel, updateVesselStatus, deleteVessel, removeVessel: deleteVessel, generatePermitNo,
-      inspectors, requestRegistration, updateInspectorStatus, deleteInspector, 
+      addVessel, updateVessel, updateVesselStatus, removeVessel: deleteVessel, generatePermitNo,
+      inspectors, requestRegistration, updateInspectorStatus, deleteInspector, deleteVessel,
       approveVessel, scheduleInspection, finalizeRegistry, getExpirationStatus, isDuplicateName, completeInspection,
     }}>
       {children}

@@ -35,7 +35,7 @@ export default function Homepage() {
   const [vesselSearch, setVesselSearch] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'rejected'>('all');
   
-  // Track selected vessel data if re-registering from a rejected card with correct typing
+  // Track selected vessel data if re-registering from a rejected item
   const [reRegisterData, setReRegisterData] = useState<Vessel | null>(null);
 
   // Standard "Register Vessel" flow (Fresh Registration)
@@ -46,7 +46,7 @@ export default function Homepage() {
     setShowTermsModal(true);
   };
 
-  // Dedicated "Register Again" flow for Rejected/Flagged Cards
+  // Dedicated "Register Again" flow for Rejected/Flagged Items
   const handleReRegister = (vessel: Vessel) => {
     setReRegisterData(vessel);
     localStorage.setItem('reRegisterVesselData', JSON.stringify(vessel));
@@ -205,7 +205,7 @@ export default function Homepage() {
           </div>
         </div>
 
-        {/* Dashboard Section */}
+        {/* Dashboard Section - LINEUP TABLE VIEW */}
         <section id="vessels-dashboard" className="w-full pt-10">
           <div className="bg-white/10 backdrop-blur-3xl border border-white/20 rounded-[3rem] p-8 md:p-12 shadow-2xl space-y-8">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-white/15 pb-8">
@@ -271,96 +271,126 @@ export default function Homepage() {
                 <p className="text-xs font-black uppercase tracking-widest text-blue-200">Loading Audit Queue...</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredVessels.map((vessel) => {
-                  const status = (vessel.status || '').toLowerCase();
-                  const isRejected = status === 'rejected' || status === 'flagged';
+              <div className="w-full overflow-x-auto rounded-3xl border border-white/20 bg-slate-950/40 backdrop-blur-2xl shadow-xl">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead>
+                    <tr className="border-b border-white/15 bg-white/5 text-[10px] font-black uppercase tracking-wider text-blue-200">
+                      <th className="py-4 px-6">ID</th>
+                      <th className="py-4 px-6">Vessel / Asset Name</th>
+                      <th className="py-4 px-6">Owner</th>
+                      <th className="py-4 px-6">Status</th>
+                      <th className="py-4 px-6">Schedule / Notice Details</th>
+                      <th className="py-4 px-6 text-center">Location &amp; Type</th>
+                      <th className="py-4 px-6 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-xs">
+                    {filteredVessels.map((vessel) => {
+                      const status = (vessel.status || '').toLowerCase();
+                      const isRejected = status === 'rejected' || status === 'flagged';
 
-                  return (
-                    <div 
-                      key={vessel.id}
-                      className={`border transition-all rounded-3xl p-6 backdrop-blur-xl flex flex-col justify-between group shadow-lg ${isRejected ? 'bg-red-950/30 border-red-500/40 hover:border-red-400' : 'bg-blue-950/30 border-blue-500/40 hover:border-blue-400'}`}
-                    >
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-start gap-2">
-                          <div className={`p-3 rounded-2xl border ${isRejected ? 'bg-red-500/20 border-red-400/40 text-red-300' : 'bg-blue-500/20 border-blue-400/40 text-blue-300'}`}>
-                            {isRejected ? <AlertTriangle size={20} /> : <CalendarClock size={20} />}
-                          </div>
-                          
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase border ${isRejected ? 'bg-red-500/20 text-red-300 border-red-500/40' : 'bg-blue-500/20 text-blue-300 border-blue-500/40'}`}>
-                            {isRejected ? <ShieldAlert size={12} /> : <CalendarClock size={12} />}
-                            {vessel.status}
-                          </span>
-                        </div>
+                      return (
+                        <tr 
+                          key={vessel.id}
+                          className={`transition-colors hover:bg-white/10 ${isRejected ? 'bg-red-950/20' : 'bg-blue-950/20'}`}
+                        >
+                          {/* Reg ID */}
+                          <td className="py-4 px-6 font-mono font-bold text-white/60 text-[11px] whitespace-nowrap">
+                            #{vessel.id}
+                          </td>
 
-                        <div>
-                          <h3 className="text-xl font-black italic uppercase text-white tracking-tight leading-tight">
+                          {/* Vessel Name */}
+                          <td className="py-4 px-6 font-black uppercase text-white tracking-tight">
                             {vessel.vessel_name || vessel.gear_type || 'UNNAMED ASSET'}
-                          </h3>
-                          <p className="text-xs font-bold text-blue-200 uppercase mt-1">
-                            Owner: {vessel.owner_name || vessel.owner || 'N/A'}
-                          </p>
-                        </div>
+                          </td>
 
-                        {isRejected ? (
-                          <div className="p-4 bg-red-950/60 border border-red-500/30 rounded-2xl space-y-3">
-                            <div>
-                              <p className="text-[9px] font-black uppercase text-red-400 tracking-wider flex items-center gap-1">
-                                <ShieldAlert size={10} /> Rejection Reason / Flag Notice
-                              </p>
-                              <p className="text-xs font-bold text-red-200 leading-snug italic mt-1">
-                                {vessel.rejection_reason || vessel.notes || vessel.remarks || 'Invalid documents or contact details.'}
-                              </p>
-                            </div>
+                          {/* Owner */}
+                          <td className="py-4 px-6 font-bold text-blue-100 uppercase whitespace-nowrap">
+                            {vessel.owner_name || vessel.owner || 'N/A'}
+                          </td>
 
-                            <button
-                              type="button"
-                              onClick={() => handleReRegister(vessel)}
-                              className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
-                            >
-                              <RotateCcw size={12} /> Register Again
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="p-4 bg-blue-950/60 border border-blue-500/30 rounded-2xl space-y-1">
-                            <p className="text-[9px] font-black uppercase text-blue-400 tracking-wider flex items-center gap-1">
-                              <CalendarClock size={10} /> Inspection Assigned
-                            </p>
-                            <p className="text-xs font-bold text-blue-100 leading-snug">
-                              Scheduled Date: <span className="text-white font-black">{vessel.scheduled_date || vessel.inspection_date || 'Pending Date Confirmation'}</span>
-                            </p>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/10 text-[10px] font-bold text-white/80">
-                          <div>
-                            <span className="text-white/40 block uppercase">Category</span>
-                            <span className="uppercase text-white font-black">{vessel.asset_category || vessel.type || 'vessel'}</span>
-                          </div>
-                          <div>
-                            <span className="text-white/40 block uppercase">Barangay</span>
-                            <span className="uppercase text-white font-black truncate flex items-center gap-1">
-                              <MapPin size={10} className="text-blue-400" /> {vessel.barangay || 'N/A'}
+                          {/* Status Badge */}
+                          <td className="py-4 px-6 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase border ${isRejected ? 'bg-red-500/20 text-red-300 border-red-500/40' : 'bg-blue-500/20 text-blue-300 border-blue-500/40'}`}>
+                              {isRejected ? <ShieldAlert size={12} /> : <CalendarClock size={12} />}
+                              {vessel.status}
                             </span>
-                          </div>
-                        </div>
-                      </div>
+                          </td>
 
-                      <div className="pt-4 mt-4 border-t border-white/10 flex justify-between items-center text-[9px] font-mono font-bold text-white/50">
-                        <span>REG ID: #{vessel.id}</span>
-                        <span className="uppercase">{vessel.is_motorized ? 'Motorized' : 'Non-Motorized'}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                          {/* Schedule / Rejection details */}
+                          <td className="py-4 px-6 max-w-xs">
+                            {isRejected ? (
+                              <div className="space-y-0.5">
+                                <span className="text-[9px] font-black uppercase text-red-400 tracking-wider flex items-center gap-1">
+                                  <AlertTriangle size={10} /> Rejection Reason
+                                </span>
+                                <p className="text-red-200 italic font-medium leading-tight truncate">
+                                  {vessel.rejection_reason || vessel.notes || vessel.remarks || 'Invalid documents or contact details.'}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <span className="text-[9px] font-black uppercase text-blue-400 tracking-wider flex items-center gap-1">
+                                  <CalendarClock size={10} /> Scheduled Inspection
+                                </span>
+                                <p className="text-white font-bold leading-tight">
+                                  {(() => {
+                                    const dateVal = vessel.scheduled_date || vessel.inspection_date;
+                                    if (!dateVal) return 'Pending Date Confirmation';
+                                    
+                                    const date = new Date(dateVal);
+                                    return !isNaN(date.getTime()) 
+                                      ? date.toLocaleDateString() 
+                                      : String(dateVal).split('T')[0];
+                                  })()}
+                                </p>
+                              </div>
+                            )}
+                          </td>
 
-                {filteredVessels.length === 0 && (
-                  <div className="col-span-full py-16 text-center bg-white/5 border border-dashed border-white/20 rounded-3xl space-y-2">
-                    <ShieldAlert size={36} className="mx-auto text-white/40" />
-                    <p className="text-sm font-black uppercase text-white/70">No Scheduled or Rejected records found</p>
-                    <p className="text-xs text-white/40">Try searching for another applicant name or registration ID.</p>
-                  </div>
-                )}
+                          {/* Barangay & Motorized Category */}
+                          <td className="py-4 px-6 text-center whitespace-nowrap">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-white/80 font-bold uppercase flex items-center justify-center gap-1 text-[11px]">
+                                <MapPin size={10} className="text-blue-400" /> {vessel.barangay || 'N/A'}
+                              </span>
+                              <span className="text-[9px] font-bold text-white/40 uppercase">
+                                {vessel.asset_category || vessel.type || 'vessel'} • {vessel.is_motorized ? 'Motorized' : 'Non-Motorized'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Action Button */}
+                          <td className="py-4 px-6 text-right whitespace-nowrap">
+                            {isRejected ? (
+                              <button
+                                type="button"
+                                onClick={() => handleReRegister(vessel)}
+                                className="inline-flex items-center gap-1.5 py-2 px-4 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md active:scale-95 border border-white/20"
+                              >
+                                <RotateCcw size={12} /> Register Again
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">
+                                Inspection Active
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {filteredVessels.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-16 text-center space-y-2">
+                          <ShieldAlert size={36} className="mx-auto text-white/40" />
+                          <p className="text-sm font-black uppercase text-white/70">No Scheduled or Rejected records found</p>
+                          <p className="text-xs text-white/40">Try searching for another applicant name or registration ID.</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

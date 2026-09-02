@@ -81,17 +81,34 @@ export default function InspectionCOI() {
   }, [Vessels, vesselId]);
 
   const assignedVessels = useMemo(() => {
-    if (!currentUser) return [];
-    const sourceList = localVessels.length > 0 ? localVessels : Vessels;
+  if (!currentUser) return [];
 
-    return sourceList.filter((v: any) => {
-      const isAssigned = String(v.assigned_inspector || '').toUpperCase() ===
-        String(currentUser.idNumber || currentUser.id || '').toUpperCase();
-      const isPendingState = v.status === "Scheduled";
-      
-      return isPendingState && (isAssigned || !v.assigned_inspector) && isValidCOIType(v);
-    });
-  }, [localVessels, Vessels, currentUser]);
+  const sourceList =
+    localVessels.length > 0 ? localVessels : Vessels;
+
+  const currentInspectorId = String(
+    currentUser.idNumber || currentUser.id || ""
+  ).toUpperCase();
+
+  return sourceList.filter((v: any) => {
+    const assignedInspector = String(
+      v.assigned_inspector || ""
+    ).toUpperCase();
+
+    const isAssigned =
+      assignedInspector !== "" &&
+      assignedInspector === currentInspectorId;
+
+    const isPendingState =
+      String(v.status || "").toUpperCase() === "SCHEDULED";
+
+    return (
+      isPendingState &&
+      isAssigned &&
+      isValidCOIType(v)
+    );
+  });
+}, [localVessels, Vessels, currentUser]);
 
   const urlVessel = useMemo(() => {
     if (!vesselId) return null;
@@ -252,7 +269,11 @@ export default function InspectionCOI() {
       tonnage_net: Number(coiData.netTonnage) || 0,
       inspected_by: currentUser?.idNumber || currentUser?.id,
       inspector_name: currentUser?.name || coiData.inspectorName,
-      assigned_inspector: null,
+      assigned_inspector:
+       selectedVessel.assigned_inspector ||
+        currentUser?.idNumber ||
+        currentUser?.id ||
+        null,
       updated_at: new Date().toISOString()
     };
 
@@ -317,11 +338,30 @@ export default function InspectionCOI() {
         const { error: permitError } = await supabase.from("permit_management").insert(permitRecord);
         if (permitError) throw permitError;
 
-        if (completeInspection) {
-          await completeInspection(vesselId, cleanOR, coiData.remarks || "Passed standard municipal vessel inspection.");
-        } else {
-          await updateVessel(selectedVessel.id, payload as any);
-        }
+      if (completeInspection) {
+  await completeInspection(
+    selectedVessel.id,
+    cleanOR,
+    coiData.remarks || "Passed standard municipal vessel inspection."
+  );
+
+  // IMPORTANT:
+  // Re-apply the original inspector assignment after completing the audit.
+  await updateVessel(selectedVessel.id, {
+    ...payload,
+    status: "Passed",
+    assigned_inspector:
+      selectedVessel.assigned_inspector ||
+      currentUser?.idNumber ||
+      currentUser?.id ||
+      null,
+    inspected_by: currentUser?.idNumber || currentUser?.id,
+    inspector_name: currentUser?.name || coiData.inspectorName,
+    updated_at: new Date().toISOString()
+  } as any);
+} else {
+  await updateVessel(selectedVessel.id, payload as any);
+}
 
       } else {
         const coiRecord = {
@@ -689,13 +729,12 @@ export default function InspectionCOI() {
     );
   }
 
-  const pendingVessels = (assignedVessels.length > 0
-    ? assignedVessels
-    : (localVessels.length > 0 ? localVessels : Vessels)
-  ).filter((v: any) => {
-    const isPendingState = String(v.status).toUpperCase() === "SCHEDULED";
-    return isPendingState && isValidCOIType(v);
-  });
+  const pendingVessels = assignedVessels.filter((v: any) => {
+  const isPendingState =
+    String(v.status).toUpperCase() === "SCHEDULED";
+
+  return isPendingState && isValidCOIType(v);
+});
 
   return (
     <div className="p-8 max-w-6xl mx-auto min-h-screen">

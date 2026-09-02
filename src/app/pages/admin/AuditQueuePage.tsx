@@ -7,15 +7,50 @@ import { toast } from 'sonner';
 import { 
   Search, Ship, ChevronRight, User, Anchor, X, 
   MapPin, Eye, CheckCircle2, Calculator,  
-  ShieldAlert, FileCheck, CalendarClock, LifeBuoy, Phone, XCircle
+  ShieldAlert, FileCheck, CalendarClock, LifeBuoy, Phone, XCircle, Trash2
 } from 'lucide-react';
 import { useAquaData } from '../../components/context/AquaRegCONTEXT';
 import { supabase } from '../../../supabaseClient';
 
 export default function AuditQueuePage() {
-  const { Vessels = [], loading } = useAquaData(); 
+  const { Vessels = [], loading, deleteVessel } = useAquaData(); 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVessel, setSelectedVessel] = useState<any | null>(null);
+
+  const handleDeleteAuditRecord = async (vessel: any) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete this audit application?\n\n` +
+      `ID: ${vessel.id}\n` +
+      `Owner: ${vessel.owner_name || vessel.owner || 'N/A'}\n\n` +
+      `This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      if (typeof deleteVessel !== 'function') {
+        throw new Error('Delete function is not available in AquaRegCONTEXT.');
+      }
+
+      const success = await deleteVessel(vessel.id);
+      if (!success) {
+        throw new Error('Failed to delete audit application.');
+      }
+
+      setSelectedVessel(null);
+
+      toast.success('Audit application deleted', {
+        description: `Application ${vessel.id} was permanently removed.`
+      });
+    } catch (error: any) {
+      console.error('Audit deletion error:', error);
+
+      toast.error('Deletion failed', {
+        description:
+          error?.message || 'Unable to permanently delete this application.'
+      });
+    }
+  };
 
   // --- UPDATED PATTERNS FOR SUPABASE SNAKE_CASE COLUMNS ---
   const queue = useMemo(() => {
@@ -110,11 +145,32 @@ export default function AuditQueuePage() {
                         {(v.asset_category || v.type || 'GENERAL').toUpperCase()}
                       </Badge>
                     </td>
-                    <td className="px-8 py-6 text-right">
-                      <Button onClick={() => setSelectedVessel(v)} className="bg-slate-900 text-white rounded-xl h-11 px-5 hover:bg-blue-600 transition-all text-[10px] font-black uppercase tracking-widest">
-                        Start Audit <ChevronRight size={14} className="ml-2" />
-                      </Button>
-                    </td>
+                   <td className="px-8 py-6">
+  <div className="flex items-center justify-end gap-2">
+
+    {/* Start Audit */}
+    <Button
+      onClick={() => setSelectedVessel(v)}
+      className="bg-slate-900 text-white rounded-xl h-11 px-5 hover:bg-blue-600 transition-all text-[10px] font-black uppercase tracking-widest"
+    >
+      Start Audit
+      <ChevronRight size={14} className="ml-2" />
+    </Button>
+
+    {/* Delete Audit Record */}
+    <Button
+      type="button"
+      onClick={() => handleDeleteAuditRecord(v)}
+      variant="outline"
+      className="h-11 w-11 p-0 rounded-xl border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all"
+      title="Delete Audit Application"
+      aria-label={`Delete audit application ${v.id}`}
+    >
+      <Trash2 size={16} />
+    </Button>
+
+  </div>
+</td>
                   </tr>
                 );
               })}
@@ -147,7 +203,7 @@ function DetailItem({ label, value, icon }: { label: string; value: string; icon
 }
 
 function AuditDetailPopup({ vessel, onClose }: { vessel: any, onClose: () => void }) {
-  const { updateVesselStatus, scheduleInspection, inspectors = [] } = useAquaData();
+  const { updateVesselStatus, scheduleInspection, inspectors = [], deleteVessel } = useAquaData();
   const [phase, setPhase] = useState<'review' | 'schedule' | 'reject'>('review');
 
   const [assignedInspectorIdNumber, setAssignedInspectorIdNumber] = useState<string>("");
@@ -267,6 +323,38 @@ function AuditDetailPopup({ vessel, onClose }: { vessel: any, onClose: () => voi
     }
   };
 
+  const handleDeleteAuditRecord = async () => {
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete this audit application?\n\n` +
+      `ID: ${vessel.id}\n` +
+      `Owner: ${vessel.owner_name || vessel.owner || 'N/A'}\n\n` +
+      `This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      if (typeof deleteVessel !== 'function') {
+        throw new Error('Delete function is not available in AquaRegCONTEXT.');
+      }
+
+      await deleteVessel(vessel.id);
+
+      onClose();
+
+      toast.success('Audit application deleted', {
+        description: `Application ${vessel.id} was permanently removed.`
+      });
+    } catch (error: any) {
+      console.error('Audit deletion error:', error);
+
+      toast.error('Deletion failed', {
+        description:
+          error?.message || 'Unable to permanently delete this application.'
+      });
+    }
+  };
+
   const renderTechnicalSpecs = () => {
     return (
       <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm relative overflow-hidden">
@@ -337,14 +425,24 @@ function AuditDetailPopup({ vessel, onClose }: { vessel: any, onClose: () => voi
             </div>
           </div>
           
-          <button 
-            onClick={onClose} 
-            className="p-4 hover:bg-red-500 rounded-2xl transition-all group"
-            aria-label="Close Audit Popup"
-            title="Close Audit Popup"
-          >
-            <X className="group-hover:rotate-90 transition-transform" />
-          </button>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => handleDeleteAuditRecord()} 
+              className="p-4 hover:bg-red-600 rounded-2xl transition-all group"
+              aria-label="Delete Audit Record"
+              title="Delete Audit Record"
+            >
+              <Trash2 className="group-hover:scale-110 transition-transform" />
+            </button>
+            <button 
+              onClick={onClose} 
+              className="p-4 hover:bg-red-500 rounded-2xl transition-all group"
+              aria-label="Close Audit Popup"
+              title="Close Audit Popup"
+            >
+              <X className="group-hover:rotate-90 transition-transform" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-10 bg-slate-50/50">
