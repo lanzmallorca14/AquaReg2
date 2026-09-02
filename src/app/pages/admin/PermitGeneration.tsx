@@ -792,177 +792,81 @@ const handleExportWPS = async () => {
     // 1. WAIT FOR FONTS
     // ---------------------------------------------------------
     if ("fonts" in document) {
-      try {
-        await document.fonts.ready;
-      } catch (fontError) {
-        console.warn("Font loading warning:", fontError);
-      }
+      await document.fonts.ready;
     }
 
     // ---------------------------------------------------------
-    // 2. WAIT FOR IMAGES
+    // 2. WAIT FOR ALL IMAGES
     // ---------------------------------------------------------
     const images = Array.from(
       printElement.querySelectorAll("img")
     );
 
     await Promise.all(
-      images.map(
-        (img) =>
-          new Promise<void>((resolve) => {
-            if (img.complete && img.naturalWidth > 0) {
-              resolve();
-              return;
-            }
+      images.map((img) => {
+        if (img.complete) return Promise.resolve();
 
-            const finish = () => {
-              img.onload = null;
-              img.onerror = null;
-              resolve();
-            };
+        return new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      })
+    );
 
-            img.onload = finish;
-            img.onerror = finish;
-
-            // Prevent one broken image from hanging export
-            setTimeout(finish, 5000);
-          })
+    // Allow browser layout to settle.
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => resolve())
       )
     );
 
     // ---------------------------------------------------------
-    // 3. WAIT FOR BROWSER LAYOUT
-    // ---------------------------------------------------------
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          resolve();
-        });
-      });
-    });
-
-    // ---------------------------------------------------------
-    // 4. GET DOCUMENT SIZE
+    // 3. GET THE ACTUAL RENDERED SIZE
     // ---------------------------------------------------------
     const rect = printElement.getBoundingClientRect();
 
-    const renderedWidth = Math.ceil(
-      Math.max(rect.width, printElement.scrollWidth)
-    );
-
-    const renderedHeight = Math.ceil(
-      Math.max(rect.height, printElement.scrollHeight)
-    );
+    const renderedWidth = Math.round(rect.width);
+    const renderedHeight = Math.round(rect.height);
 
     if (!renderedWidth || !renderedHeight) {
       throw new Error("Permit document has invalid dimensions.");
     }
 
     // ---------------------------------------------------------
-    // 5. SAFE SCALE FOR HOSTING
-    // ---------------------------------------------------------
-    // Do NOT use an excessive canvas size.
-    // This prevents mobile/hosting browser memory crashes.
-    const MAX_CANVAS_PIXELS = 12000000;
-
-    const normalScale = 1.5;
-
-    let scale = normalScale;
-
-    const estimatedPixels =
-      renderedWidth * renderedHeight * scale * scale;
-
-    if (estimatedPixels > MAX_CANVAS_PIXELS) {
-      scale = Math.sqrt(
-        MAX_CANVAS_PIXELS /
-          (renderedWidth * renderedHeight)
-      );
-    }
-
-    // Keep scale reasonable
-    scale = Math.max(1, Math.min(scale, 1.5));
-
-    console.log("PDF EXPORT SIZE:", {
-      renderedWidth,
-      renderedHeight,
-      scale,
-      estimatedPixels:
-        renderedWidth *
-        renderedHeight *
-        scale *
-        scale,
-    });
-
-    // ---------------------------------------------------------
-    // 6. CAPTURE DOCUMENT
+    // 4. CAPTURE EXACTLY WHAT IS CURRENTLY DISPLAYED
     // ---------------------------------------------------------
     const canvas = await html2canvas(printElement, {
-      scale,
-
+      scale: 2,
       useCORS: true,
       allowTaint: false,
-
       backgroundColor: "#ffffff",
-
       logging: false,
 
       width: renderedWidth,
       height: renderedHeight,
 
-      windowWidth: Math.max(
-        document.documentElement.clientWidth,
-        renderedWidth
-      ),
-
-      windowHeight: Math.max(
-        document.documentElement.clientHeight,
-        renderedHeight
-      ),
+      windowWidth: renderedWidth,
+      windowHeight: renderedHeight,
 
       scrollX: 0,
       scrollY: 0,
 
-      imageTimeout: 10000,
-
-      removeContainer: true,
-
       onclone: (clonedDocument) => {
         const clonedElement =
-          clonedDocument.getElementById(
-            "permit-document"
-          );
+          clonedDocument.getElementById("permit-document");
 
         if (!clonedElement) return;
 
+        // IMPORTANT:
+        // Keep the exact dimensions of the displayed document.
         clonedElement.style.transform = "none";
         clonedElement.style.margin = "0";
         clonedElement.style.boxSizing = "border-box";
-        clonedElement.style.overflow = "hidden";
-
-        // Prevent animation/transition problems
-        const style =
-          clonedDocument.createElement("style");
-
-        style.innerHTML = `
-          *,
-          *::before,
-          *::after {
-            animation: none !important;
-            transition: none !important;
-            caret-color: transparent !important;
-          }
-        `;
-
-        clonedDocument.head.appendChild(style);
       },
     });
 
-    if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
-      throw new Error("Unable to create PDF canvas.");
-    }
-
     // ---------------------------------------------------------
-    // 7. DETERMINE PAPER SIZE
+    // 5. DETERMINE PAPER SIZE
     // ---------------------------------------------------------
     const isCertificate = isVesselType;
 
@@ -974,9 +878,6 @@ const handleExportWPS = async () => {
       ? 355.6
       : 297;
 
-    // ---------------------------------------------------------
-    // 8. CREATE PDF
-    // ---------------------------------------------------------
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -985,50 +886,35 @@ const handleExportWPS = async () => {
     });
 
     // ---------------------------------------------------------
-    // 9. FIT DOCUMENT TO PAGE
+    // 6. FIT IMAGE TO PAPER WITHOUT DISTORTION
     // ---------------------------------------------------------
-    const canvasRatio =
-      canvas.width / canvas.height;
-
-    const pageRatio =
-      pageWidth / pageHeight;
+    const canvasRatio = canvas.width / canvas.height;
+    const pageRatio = pageWidth / pageHeight;
 
     let imageWidth: number;
     let imageHeight: number;
 
     if (canvasRatio > pageRatio) {
+      // Wider than page
       imageWidth = pageWidth;
-      imageHeight =
-        imageWidth / canvasRatio;
+      imageHeight = imageWidth / canvasRatio;
     } else {
+      // Taller than page
       imageHeight = pageHeight;
-      imageWidth =
-        imageHeight * canvasRatio;
+      imageWidth = imageHeight * canvasRatio;
     }
 
-    const x =
-      (pageWidth - imageWidth) / 2;
-
-    const y =
-      (pageHeight - imageHeight) / 2;
+    const x = (pageWidth - imageWidth) / 2;
+    const y = (pageHeight - imageHeight) / 2;
 
     // ---------------------------------------------------------
-    // 10. USE JPEG TO REDUCE MEMORY
+    // 7. ADD IMAGE
     // ---------------------------------------------------------
     const imageData = canvas.toDataURL(
       "image/jpeg",
-      0.92
+      0.98
     );
 
-    if (!imageData || imageData === "data:,") {
-      throw new Error(
-        "Failed to convert permit to image."
-      );
-    }
-
-    // ---------------------------------------------------------
-    // 11. ADD TO PDF
-    // ---------------------------------------------------------
     pdf.addImage(
       imageData,
       "JPEG",
@@ -1041,55 +927,27 @@ const handleExportWPS = async () => {
     );
 
     // ---------------------------------------------------------
-    // 12. SAVE
+    // 8. FILE NAME
     // ---------------------------------------------------------
-    const safeCertificateNo =
-      String(
-        data.certificateNo ||
-          data.registrationId ||
-          "Permit"
-      ).replace(/[^a-zA-Z0-9_-]/g, "_");
-
-    const safeOfficialNo =
-      String(
-        data.officialNo ||
-          data.registrationId ||
-          "Permit"
-      ).replace(/[^a-zA-Z0-9_-]/g, "_");
-
     const fileName = isCertificate
-      ? `Certificate-${safeCertificateNo}.pdf`
-      : `Mayors-Permit-${safeOfficialNo}.pdf`;
+      ? `Certificate-${data.certificateNo || data.registrationId || "Permit"}.pdf`
+      : `Mayors-Permit-${data.officialNo || data.registrationId || "Permit"}.pdf`;
 
     pdf.save(fileName);
 
-    toast.success(
-      "WPS/PDF exported successfully.",
-      {
-        id: "wps-export",
-      }
-    );
-
-    // ---------------------------------------------------------
-    // 13. RELEASE CANVAS MEMORY
-    // ---------------------------------------------------------
-    canvas.width = 1;
-    canvas.height = 1;
+    toast.success("WPS/PDF exported successfully.", {
+      id: "wps-export",
+    });
 
   } catch (error) {
-    console.error(
-      "WPS EXPORT ERROR:",
-      error
-    );
+    console.error("WPS EXPORT ERROR:", error);
 
-    toast.error(
-      "Failed to export permit. Please try again.",
-      {
-        id: "wps-export",
-      }
-    );
+    toast.error("Failed to export permit.", {
+      id: "wps-export",
+    });
   }
 };
+
 
 const handleSavePermit = async () => {
     if (!vesselId) {
