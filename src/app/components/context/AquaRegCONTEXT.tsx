@@ -126,7 +126,9 @@ interface AquaRegContextType {
   getExpirationStatus: (expiryDate: string | undefined) => ExpirationStatus;
   isDuplicateName: (name: string, currentId?: string) => Promise<boolean>;
   generatePermitNo: () => Promise<string>;
+
 }
+
 
 const AquaRegContext = createContext<AquaRegContextType | undefined>(undefined);
 

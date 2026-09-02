@@ -13,6 +13,8 @@ import {
 import { useAquaData } from '../../components/context/AquaRegCONTEXT';
 import {supabase} from '../../../supabaseClient'
 import { aquaOfflineDB } from '../../../offline/db';
+import html2canvas from "html2canvas-pro";
+import jsPDF from "jspdf";
 
 
 type SubType = 'MOTORIZED' | 'NON-MOTORIZED' | 'PANGULONG' | 'FISHING GEAR' | 'PAYAO/BALSA';
@@ -50,20 +52,6 @@ interface VesselDataState {
   placeOfBuilt: string;
 }
 
-const formatPayaoDisplay = (vesselName: string, boatNames: string) => {
-  if (!vesselName) return "";
-
-  const numbers = boatNames
-    .split(",")
-    .map(n => n.trim())
-    .filter(Boolean)
-    .map((n) => {
-      if (n.startsWith("#")) return n;
-      return `#${n}`;
-    });
-
-  return `NAME: ${vesselName} ${numbers.join(", ")}`;
-};
 const numberToWords = (num: number): string => {
   const ones = [
     "",
@@ -118,17 +106,14 @@ const numberToWords = (num: number): string => {
 };
 
 
-const formatUnits = (value:string)=>{
-
+const formatUnits = (value: string) => {
   const number = Number(value);
 
-  if(!number || number <=0){
-    return "";
-  }
+  if (!number || number <= 0) return "";
 
   const word = numberToWords(number);
 
-  return `${number} (${word}) ${number === 1 ? "UNIT":"UNITS"} OF`;
+  return `${number} (${word}) ${number === 1 ? "UNIT" : "UNITS"} OF`;
 };
 
 const formatMoney = (value:string) => {
@@ -741,7 +726,10 @@ const handleFinishEdit = async () => {
       boat_name: data.boatName,
       number_of_boats: data.numberOfBoats,
       units_in_words: data.unitsInWords,
-      permit_fee: String(Number(data.permitFee?.replace(/,/g, '') || 0)),
+      permit_fee: String(
+        Number(data.permitFee?.replace(/,/g, '') || 0)
+      ),
+      gear_type: data.gearCategory,
     });
 
     setIsEditable(false);
@@ -753,13 +741,112 @@ const handleFinishEdit = async () => {
   }
 };
 
-const handlePrint = () => {
-  toast.dismiss();
 
-  setTimeout(() => {
-    window.print();
-  }, 300);
+
+const handleExportWPS = async () => {
+  const printElement = document.getElementById("permit-document");
+
+  if (!printElement) {
+    toast.error("Permit document not found.");
+    return;
+  }
+
+  try {
+    toast.loading("Preparing WPS document...", {
+      id: "wps-export",
+    });
+
+    const originalWidth = printElement.style.width;
+    const originalHeight = printElement.style.height;
+    const originalTransform = printElement.style.transform;
+
+    // Make the capture stable and prevent clipping.
+    printElement.style.transform = "none";
+
+    const isCertificate = isVesselType;
+
+    if (isCertificate) {
+      // Long bond / Legal-style certificate
+      printElement.style.width = "215.9mm";
+      printElement.style.height = "355.6mm";
+    } else {
+      // A4 Mayor's Permit
+      printElement.style.width = "210mm";
+      printElement.style.height = "297mm";
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const canvas = await html2canvas(printElement, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+      width: printElement.scrollWidth,
+      height: printElement.scrollHeight,
+    });
+
+    const orientation = "portrait";
+
+    const pdf = new jsPDF({
+      orientation,
+      unit: "mm",
+      format: isCertificate ? [215.9, 355.6] : "a4",
+      compress: true,
+    });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    const imageRatio = canvas.width / canvas.height;
+
+    let imageWidth = pageWidth;
+    let imageHeight = imageWidth / imageRatio;
+
+    if (imageHeight > pageHeight) {
+      imageHeight = pageHeight;
+      imageWidth = imageHeight * imageRatio;
+    }
+
+    const x = (pageWidth - imageWidth) / 2;
+    const y = (pageHeight - imageHeight) / 2;
+
+    pdf.addImage(
+      canvas.toDataURL("image/jpeg", 0.95),
+      "JPEG",
+      x,
+      y,
+      imageWidth,
+      imageHeight,
+      undefined,
+      "FAST"
+    );
+
+    const fileName =
+      isCertificate
+        ? `Certificate-${data.certificateNo || data.registrationId || "Permit"}.pdf`
+        : `Mayors-Permit-${data.officialNo || data.registrationId || "Permit"}.pdf`;
+
+    pdf.save(fileName);
+
+    // Restore layout.
+    printElement.style.width = originalWidth;
+    printElement.style.height = originalHeight;
+    printElement.style.transform = originalTransform;
+
+    toast.success("WPS/PDF exported successfully.", {
+      id: "wps-export",
+    });
+
+  } catch (error) {
+    console.error("WPS EXPORT ERROR:", error);
+
+    toast.error("Failed to export permit.", {
+      id: "wps-export",
+    });
+  }
 };
+
 
 const handleSavePermit = async () => {
     if (!vesselId) {
@@ -845,6 +932,10 @@ const handleSavePermit = async () => {
 
   // --- RENDERING ROUTE A: DASHBOARD VIEW (NO ASSET SELECTED) ---
  if (!vesselId) {
+
+
+  
+
     return (
       <div className="min-h-screen bg-slate-50 p-8 pt-12 font-sans">
         <div className="max-w-6xl mx-auto space-y-8">
@@ -1124,16 +1215,19 @@ return (
       />
 
     </div>
-    {subType === "PAYAO/BALSA" && (
+   {subType === "PAYAO/BALSA" && (
   <div className="space-y-3 border-t pt-4">
 
+    <Label className="text-[9px] font-black uppercase">
+      Payao / Balsa Name
+    </Label>
 
     <Input
-  value={data.vesselName}
-  disabled
-  className="bg-slate-100 font-bold"
-/>
-
+      name="vesselName"
+      value={data.vesselName}
+      disabled
+      className="bg-slate-100 font-bold"
+    />
 
     <Label className="text-[9px] font-black uppercase">
       Number of Boats
@@ -1141,20 +1235,28 @@ return (
 
     <Input
       name="numberOfBoats"
+      type="number"
       value={data.numberOfBoats}
       onChange={handleChange}
       placeholder="5"
+      className="h-10 font-bold bg-slate-50 border-slate-200"
     />
 
-  <Label className="text-[9px] font-black uppercase">
-    Boat Name
-  </Label>
+    <Label className="text-[9px] font-black uppercase">
+      Boat Name / Boat Numbers
+    </Label>
 
-<Input
-  name="boatName"
-  onChange={handleChange}
-  placeholder="Example: #107, #108, #109, #110"
-/>
+    <Input
+      name="boatName"
+      value={data.boatName}
+      onChange={handleChange}
+      placeholder="Example: #107, #108, #109, #110"
+      className="h-10 font-bold bg-slate-50 border-slate-200"
+    />
+
+    <p className="text-[9px] text-slate-400 font-bold uppercase">
+      These details can be edited only in Configuration Mode.
+    </p>
 
   </div>
 )}
@@ -1190,12 +1292,15 @@ return (
               Save Permit
             </Button>
 
-            <Button
-              onClick={handlePrint}
-              className="w-full bg-slate-900 text-white font-semibold shadow-md hover:bg-slate-800"
-            >
-              Print Permit
-            </Button>
+
+           <Button
+  type="button"
+  onClick={handleExportWPS}
+  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md"
+>
+  <FileText size={16} className="mr-2" />
+  Export WPS / PDF
+</Button>
 
             {/* NEW: DELETE BUTTON FOR CERTIFICATE / PERMIT */}
             <Button
@@ -1222,6 +1327,7 @@ return (
           {isVesselType ? (
             /* LAYOUT A: CERTIFICATE OF NUMBER */
 <div 
+ id="permit-document"
   className="bg-white text-black font-sans print:m-0 overflow-hidden flex flex-col justify-between"
   style={{
     width: '215.9mm',
@@ -1388,7 +1494,10 @@ return (
 </div>
           ) : (
             /* LAYOUT B: MAYOR'S PERMIT */
-      <div className="bg-white text-black font-serif print:m-0 relative overflow-hidden" style={{ width: '8.27in', height: '11.69in', padding: '0.8in', boxSizing: 'border-box' }}>
+      <div 
+       id="permit-document"
+      className="bg-white text-black font-serif print:m-0 relative overflow-hidden" style={{ width: '8.27in', height: '11.69in', padding: '0.8in', boxSizing: 'border-box' }}>
+
               <div className="text-center space-y-1 mb-12">
                 <p className="text-sm font-bold uppercase">Republic of the Philippines</p>
                 <p className="text-sm font-bold uppercase">Province of Romblon</p>
@@ -1430,27 +1539,12 @@ return (
     <div className="flex justify-center items-center gap-3 flex-wrap">
 
 {subType === "PAYAO/BALSA" ? (
- 
-<>
-    <p className="text-3xl font-black italic uppercase leading-tight">
-      {data.unitsInWords || `${numberToWords(Number(data.numberOfBoats))} (${Number(data.numberOfBoats)}): UNITS OF PAYAO/BALSA`}
-    </p>
-
-    <p className="text-3xl font-black italic uppercase leading-tight mt-2 whitespace-pre-line">
-      {formatPayaoDisplay(
-        data.vesselName,
-        data.boatName || Array.from(
-          { length: Number(data.numberOfBoats) || 0 },
-          (_, i) => `#${i + 1}`
-        ).join(', ')
-      )}
-    </p>
-  </>
-  
-
+  <p className="text-3xl font-black uppercase underline decoration-[3px] underline-offset-[12px] italic text-blue-900">
+    {data.vesselName || "PAYAO/BALSA"}
+  </p>
 ) : (
   <>
-    {(subType === "FISHING GEAR" && data.unitsInWords) && (
+    {subType === "FISHING GEAR" && data.unitsInWords && (
       <span className="text-3xl font-black italic uppercase">
         {data.unitsInWords}
       </span>
@@ -1463,7 +1557,6 @@ return (
     </p>
   </>
 )}
-
 
     
     </div>

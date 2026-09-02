@@ -447,18 +447,48 @@ const send = async () => {
     const trimmedName = f.vesselName.trim().toUpperCase();
 
     // 🛑 ULTIMATE DUPLICATE CHECK GUARD (Allows re-audit of the same ID)
-    if (s.mode !== 'RE-AUDIT' && trimmedName) {
-      const isAlreadyTaken = Vessels.some((v: any) => {
-        const existingName = String(v.vessel_name || v.gear_type || '').toUpperCase();
-        const existingId = String(v.id || '');
-        return existingName === trimmedName && existingId !== String(s.id);
-      });
+    // ==========================================================
+// FINAL DUPLICATE NAME GUARD
+// DUPLICATE CHECK APPLIES ONLY TO:
+//   1. VESSEL
+//   2. PANGULONG
+//
+// FISHING GEAR and PAYAO/BALSA CAN HAVE DUPLICATE NAMES.
+// ==========================================================
+if (
+  shouldCheckDuplicateName &&
+  s.mode !== 'RE-AUDIT' &&
+  trimmedName
+) {
+  const isAlreadyTaken = Vessels.some((v: any) => {
+    const existingCategory = String(
+      v.asset_category || v.type || ''
+    ).toLowerCase();
 
-      if (isAlreadyTaken || isDuplicate) {
-        toast.error("Registration Blocked: Duplicate vessel or asset name detected.");
-        return;
-      }
+    // Only Vessel and Pangulong are subject to duplicate checking
+    if (!['vessel', 'pangulong'].includes(existingCategory)) {
+      return false;
     }
+
+    const existingName = String(
+      v.vessel_name || v.gear_type || ''
+    ).trim().toUpperCase();
+
+    const existingId = String(v.id || '');
+
+    return (
+      existingName === trimmedName &&
+      existingId !== String(s.id || '')
+    );
+  });
+
+  if (isAlreadyTaken || isDuplicate) {
+    toast.error(
+      "Registration Blocked: Duplicate vessel or Pangulong name detected."
+    );
+    return;
+  }
+}
 
     setS(prev => ({ ...prev, proc: 1 }));
 
