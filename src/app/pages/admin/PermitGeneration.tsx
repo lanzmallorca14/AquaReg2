@@ -776,54 +776,63 @@ const handleFinishEdit = async () => {
 
 
 const handleExportWPS = async () => {
-  const element = document.getElementById("permit-preview");
+  const printElement = document.getElementById("permit-document");
 
-  if (!element) {
-    toast.error("Permit preview not found.");
+  if (!printElement) {
+    toast.error("Permit document not found.");
     return;
   }
 
   try {
-    toast.loading("Generating PDF...", {
-      id: "pdf-export",
+    toast.loading("Preparing WPS document...", {
+      id: "wps-export",
     });
 
-    // Make sure fonts are ready before capturing.
-    if (document.fonts?.ready) {
-      await document.fonts.ready;
+    // ---------------------------------------------------------
+    // 1. WAIT FOR FONTS
+    // ---------------------------------------------------------
+    if ("fonts" in document) {
+      try {
+        await document.fonts.ready;
+      } catch (fontError) {
+        console.warn("Font loading warning:", fontError);
+      }
     }
 
-    // Wait for images to finish loading.
+    // ---------------------------------------------------------
+    // 2. WAIT FOR IMAGES
+    // ---------------------------------------------------------
     const images = Array.from(
-      element.querySelectorAll("img")
+      printElement.querySelectorAll("img")
     );
 
     await Promise.all(
       images.map(
         (img) =>
           new Promise<void>((resolve) => {
-            if (img.complete) {
+            if (img.complete && img.naturalWidth > 0) {
               resolve();
               return;
             }
 
-            const done = () => resolve();
+            const finish = () => {
+              img.onload = null;
+              img.onerror = null;
+              resolve();
+            };
 
-            img.addEventListener("load", done, {
-              once: true,
-            });
+            img.onload = finish;
+            img.onerror = finish;
 
-            img.addEventListener("error", done, {
-              once: true,
-            });
-
-            // Never allow one broken image to hang the export.
-            setTimeout(resolve, 3000);
+            // Prevent one broken image from hanging export
+            setTimeout(finish, 5000);
           })
       )
     );
 
-    // Allow the browser to finish layout/painting.
+    // ---------------------------------------------------------
+    // 3. WAIT FOR BROWSER LAYOUT
+    // ---------------------------------------------------------
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -832,191 +841,251 @@ const handleExportWPS = async () => {
       });
     });
 
-    const rect = element.getBoundingClientRect();
+    // ---------------------------------------------------------
+    // 4. GET DOCUMENT SIZE
+    // ---------------------------------------------------------
+    const rect = printElement.getBoundingClientRect();
 
-    const renderedWidth = Math.ceil(rect.width);
-    const renderedHeight = Math.ceil(rect.height);
+    const renderedWidth = Math.ceil(
+      Math.max(rect.width, printElement.scrollWidth)
+    );
 
-    if (
-      renderedWidth <= 0 ||
-      renderedHeight <= 0
-    ) {
-      throw new Error(
-        `Invalid permit dimensions: ${renderedWidth} x ${renderedHeight}`
+    const renderedHeight = Math.ceil(
+      Math.max(rect.height, printElement.scrollHeight)
+    );
+
+    if (!renderedWidth || !renderedHeight) {
+      throw new Error("Permit document has invalid dimensions.");
+    }
+
+    // ---------------------------------------------------------
+    // 5. SAFE SCALE FOR HOSTING
+    // ---------------------------------------------------------
+    // Do NOT use an excessive canvas size.
+    // This prevents mobile/hosting browser memory crashes.
+    const MAX_CANVAS_PIXELS = 12000000;
+
+    const normalScale = 1.5;
+
+    let scale = normalScale;
+
+    const estimatedPixels =
+      renderedWidth * renderedHeight * scale * scale;
+
+    if (estimatedPixels > MAX_CANVAS_PIXELS) {
+      scale = Math.sqrt(
+        MAX_CANVAS_PIXELS /
+          (renderedWidth * renderedHeight)
       );
     }
 
-    // Limit total canvas size for hosted browsers.
-    const MAX_PIXELS = 4_000_000;
-    const requestedScale = 1.5;
-
-    const estimatedPixels =
-      renderedWidth *
-      renderedHeight *
-      requestedScale *
-      requestedScale;
-
-    const safeScale =
-      estimatedPixels > MAX_PIXELS
-        ? Math.sqrt(
-            MAX_PIXELS /
-              (renderedWidth * renderedHeight)
-          )
-        : requestedScale;
+    // Keep scale reasonable
+    scale = Math.max(1, Math.min(scale, 1.5));
 
     console.log("PDF EXPORT SIZE:", {
       renderedWidth,
       renderedHeight,
-      scale: safeScale,
+      scale,
       estimatedPixels:
         renderedWidth *
         renderedHeight *
-        safeScale *
-        safeScale,
+        scale *
+        scale,
     });
 
-    // Capture the permit.
-    const canvas = await html2canvas(element, {
-      scale: safeScale,
+    // ---------------------------------------------------------
+    // 6. CAPTURE DOCUMENT
+    // ---------------------------------------------------------
+    const canvas = await html2canvas(printElement, {
+      scale,
 
-      // Important for hosted Supabase images.
       useCORS: true,
       allowTaint: false,
 
       backgroundColor: "#ffffff",
 
+      logging: false,
+
       width: renderedWidth,
       height: renderedHeight,
 
-      logging: false,
+      windowWidth: Math.max(
+        document.documentElement.clientWidth,
+        renderedWidth
+      ),
 
-      imageTimeout: 5000,
+      windowHeight: Math.max(
+        document.documentElement.clientHeight,
+        renderedHeight
+      ),
+
+      scrollX: 0,
+      scrollY: 0,
+
+      imageTimeout: 10000,
 
       removeContainer: true,
+
+      onclone: (clonedDocument) => {
+        const clonedElement =
+          clonedDocument.getElementById(
+            "permit-document"
+          );
+
+        if (!clonedElement) return;
+
+        clonedElement.style.transform = "none";
+        clonedElement.style.margin = "0";
+        clonedElement.style.boxSizing = "border-box";
+        clonedElement.style.overflow = "hidden";
+
+        // Prevent animation/transition problems
+        const style =
+          clonedDocument.createElement("style");
+
+        style.innerHTML = `
+          *,
+          *::before,
+          *::after {
+            animation: none !important;
+            transition: none !important;
+            caret-color: transparent !important;
+          }
+        `;
+
+        clonedDocument.head.appendChild(style);
+      },
     });
 
-    console.log("PDF CANVAS:", {
-      width: canvas.width,
-      height: canvas.height,
-    });
-
-    if (
-      !canvas.width ||
-      !canvas.height
-    ) {
-      throw new Error(
-        "PDF canvas was generated with an invalid size."
-      );
+    if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+      throw new Error("Unable to create PDF canvas.");
     }
 
-    // JPEG greatly reduces memory usage compared with PNG.
-    const imageData = canvas.toDataURL(
-      "image/jpeg",
-      0.85
-    );
+    // ---------------------------------------------------------
+    // 7. DETERMINE PAPER SIZE
+    // ---------------------------------------------------------
+    const isCertificate = isVesselType;
 
-    if (!imageData || imageData === "data:,") {
-      throw new Error(
-        "Unable to create PDF image."
-      );
-    }
+    const pageWidth = isCertificate
+      ? 215.9
+      : 210;
 
-    console.log("PDF IMAGE GENERATED");
+    const pageHeight = isCertificate
+      ? 355.6
+      : 297;
 
-    /*
-     * WPS / A4 PDF
-     */
+    // ---------------------------------------------------------
+    // 8. CREATE PDF
+    // ---------------------------------------------------------
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
-      format: "a4",
+      format: [pageWidth, pageHeight],
       compress: true,
     });
 
-    const pageWidth =
-      pdf.internal.pageSize.getWidth();
-
-    const pageHeight =
-      pdf.internal.pageSize.getHeight();
-
-    /*
-     * Fit the captured permit inside A4
-     * without stretching it.
-     */
-    const imageRatio =
+    // ---------------------------------------------------------
+    // 9. FIT DOCUMENT TO PAGE
+    // ---------------------------------------------------------
+    const canvasRatio =
       canvas.width / canvas.height;
 
     const pageRatio =
       pageWidth / pageHeight;
 
-    let pdfWidth: number;
-    let pdfHeight: number;
+    let imageWidth: number;
+    let imageHeight: number;
 
-    if (imageRatio > pageRatio) {
-      pdfWidth = pageWidth;
-      pdfHeight = pdfWidth / imageRatio;
+    if (canvasRatio > pageRatio) {
+      imageWidth = pageWidth;
+      imageHeight =
+        imageWidth / canvasRatio;
     } else {
-      pdfHeight = pageHeight;
-      pdfWidth = pdfHeight * imageRatio;
+      imageHeight = pageHeight;
+      imageWidth =
+        imageHeight * canvasRatio;
     }
 
     const x =
-      (pageWidth - pdfWidth) / 2;
+      (pageWidth - imageWidth) / 2;
 
     const y =
-      (pageHeight - pdfHeight) / 2;
+      (pageHeight - imageHeight) / 2;
 
+    // ---------------------------------------------------------
+    // 10. USE JPEG TO REDUCE MEMORY
+    // ---------------------------------------------------------
+    const imageData = canvas.toDataURL(
+      "image/jpeg",
+      0.92
+    );
+
+    if (!imageData || imageData === "data:,") {
+      throw new Error(
+        "Failed to convert permit to image."
+      );
+    }
+
+    // ---------------------------------------------------------
+    // 11. ADD TO PDF
+    // ---------------------------------------------------------
     pdf.addImage(
       imageData,
       "JPEG",
       x,
       y,
-      pdfWidth,
-      pdfHeight,
+      imageWidth,
+      imageHeight,
       undefined,
       "FAST"
     );
 
-    console.log("PDF IMAGE ADDED");
+    // ---------------------------------------------------------
+    // 12. SAVE
+    // ---------------------------------------------------------
+    const safeCertificateNo =
+      String(
+        data.certificateNo ||
+          data.registrationId ||
+          "Permit"
+      ).replace(/[^a-zA-Z0-9_-]/g, "_");
 
-    /*
-     * Build a safe filename.
-     */
-    const rawName =
-      data.vesselName ||
-      data.boatName ||
-      "PERMIT";
+    const safeOfficialNo =
+      String(
+        data.officialNo ||
+          data.registrationId ||
+          "Permit"
+      ).replace(/[^a-zA-Z0-9_-]/g, "_");
 
-    const safeName = String(rawName)
-      .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
-      .replace(/\s+/g, "_")
-      .substring(0, 100);
+    const fileName = isCertificate
+      ? `Certificate-${safeCertificateNo}.pdf`
+      : `Mayors-Permit-${safeOfficialNo}.pdf`;
 
-    pdf.save(
-      `${safeName}_permit.pdf`
+    pdf.save(fileName);
+
+    toast.success(
+      "WPS/PDF exported successfully.",
+      {
+        id: "wps-export",
+      }
     );
 
-    /*
-     * Release canvas memory.
-     */
+    // ---------------------------------------------------------
+    // 13. RELEASE CANVAS MEMORY
+    // ---------------------------------------------------------
     canvas.width = 1;
     canvas.height = 1;
 
-    toast.success("PDF exported successfully.", {
-      id: "pdf-export",
-    });
-
-    console.log("PDF EXPORT COMPLETED");
   } catch (error) {
     console.error(
-      "PDF EXPORT FAILED:",
+      "WPS EXPORT ERROR:",
       error
     );
 
     toast.error(
-      "PDF export failed. Please try again.",
+      "Failed to export permit. Please try again.",
       {
-        id: "pdf-export",
+        id: "wps-export",
       }
     );
   }
