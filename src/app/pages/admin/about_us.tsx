@@ -14,10 +14,10 @@ export default function AboutUs() {
       <section className="relative bg-gradient-to-br from-blue-950 via-blue-900 to-cyan-800 text-white py-24 px-6 lg:px-20 text-center overflow-hidden">
         <div className="max-w-4xl mx-auto relative z-10">
           <span className="bg-cyan-500/20 text-cyan-300 text-xs md:text-sm font-semibold tracking-widest uppercase px-4 py-1.5 rounded-full border border-cyan-400/30">
-            About Us: AquaReg Romblon
+            About Us: AquaReg Romblon 
           </span>
           <h1 className="text-4xl md:text-6xl font-extrabold mt-6 mb-4 tracking-tight">
-            Bridging Islands, Empowering Fisherfolk
+            Bridging Islands, Empowering Fisherfolk, and Protecting Romblon’s Marine Heritage 
           </h1>
           <p className="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto font-light leading-relaxed">
             Transitioning from paper-bound struggles to a digital lifeline for the island communities of Romblon.
