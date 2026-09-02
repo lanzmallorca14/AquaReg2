@@ -162,6 +162,10 @@ export default function AquaRegNewRegistration() {
 
   const hasInvalidFormat = useMemo(() => /[A-Za-z]\d/.test(f.vesselName), [f.vesselName]);
 
+  const shouldCheckDuplicateName = useMemo(() => {
+    return ['vessel', 'pangulong'].includes(f.assetCategory);
+  }, [f.assetCategory]);
+
   const activeDocKeys = useMemo(() => {
     if (f.assetCategory === 'vessel') return ['barangayClearance', 'cedula', 'validID'];
     return ['barangayClearance', 'cedula', 'bfarPermit', 'marinaPermit'];
@@ -306,61 +310,115 @@ export default function AquaRegNewRegistration() {
   }, [f.length, f.width, f.depth, f.assetCategory, f.vesselType]);
 
  useEffect(() => {
-    let isMounted = true;
+  let isMounted = true;
 
-    const checkDuplicateNameAcrossSystems = async () => {
-      const trimmedName = f.vesselName.trim().toUpperCase();
-      if (!trimmedName) {
-        if (isMounted) setIsDuplicate(false);
+  // Duplicate-name validation applies ONLY to:
+  // 1. Vessel
+  // 2. Pangulong
+  //
+  // Payao and Fishing Gear are NOT subject to duplicate-name validation.
+  if (!shouldCheckDuplicateName) {
+    setIsDuplicate(false);
+    return;
+  }
+
+  const checkDuplicateNameAcrossSystems = async () => {
+    const trimmedName = f.vesselName.trim().toUpperCase();
+
+    if (!trimmedName) {
+      if (isMounted) setIsDuplicate(false);
+      return;
+    }
+
+    try {
+      // ==========================================================
+      // 1. CHECK LOCAL VESSELS ARRAY
+      // ==========================================================
+      const foundLocally = Vessels.some((v: any) => {
+        const existingCategory = String(
+          v.asset_category || v.type || ''
+        ).toLowerCase();
+
+        // Only compare against Vessel and Pangulong records
+        if (!['vessel', 'pangulong'].includes(existingCategory)) {
+          return false;
+        }
+
+        const existingName = String(
+          v.vessel_name || v.gear_type || ''
+        ).trim().toUpperCase();
+
+        const existingId = String(v.id || '');
+
+        // Ignore the same record during Renewal / Re-Audit
+        return (
+          existingName === trimmedName &&
+          existingId !== String(s.id || '')
+        );
+      });
+
+      if (foundLocally) {
+        if (isMounted) setIsDuplicate(true);
         return;
       }
 
-      try {
-        // 1. Check against local memory context first (Vessels array)
-        const foundLocally = Vessels.some((v: any) => {
-          const existingName = String(v.vessel_name || v.gear_type || '').toUpperCase();
-          const existingId = String(v.id || '');
-          // Match name, but ignore if it's the exact same ID being edited (Re-audit/Renewal)
-          return existingName === trimmedName && existingId !== String(s.id);
-        });
+      // ==========================================================
+      // 2. CHECK SUPABASE
+      // ==========================================================
+      if (navigator.onLine) {
+        const { data, error } = await supabase
+          .from('Vessels')
+          .select('id, vessel_name, gear_type, asset_category, type')
+          .or(
+            `vessel_name.eq.${trimmedName},gear_type.eq.${trimmedName}`
+          );
 
-        if (foundLocally) {
-          if (isMounted) setIsDuplicate(true);
-          return;
-        }
+        if (!error && data) {
+          const matches = data.filter((v: any) => {
+            const existingCategory = String(
+              v.asset_category || v.type || ''
+            ).toLowerCase();
 
-        // 2. If online, perform a strict query check against Supabase
-        if (navigator.onLine) {
-          const { data, error } = await supabase
-            .from('Vessels')
-            .select('id, vessel_name, gear_type')
-            .or(`vessel_name.eq.${trimmedName},gear_type.eq.${trimmedName}`);
-
-          if (!error && data) {
-            // Filter out the current record ID if we are updating an existing entry
-            const matches = data.filter(v => String(v.id) !== String(s.id));
-            if (matches.length > 0) {
-              if (isMounted) setIsDuplicate(true);
-              return;
+            // Only Vessel and Pangulong participate
+            // in duplicate-name checking.
+            if (!['vessel', 'pangulong'].includes(existingCategory)) {
+              return false;
             }
+
+            return String(v.id) !== String(s.id || '');
+          });
+
+          if (matches.length > 0) {
+            if (isMounted) setIsDuplicate(true);
+            return;
           }
         }
-
-        // No duplicates found
-        if (isMounted) setIsDuplicate(false);
-      } catch (err) {
-        console.error("Duplicate check error:", err);
-        if (isMounted) setIsDuplicate(false);
       }
-    };
 
-    const timer = setTimeout(checkDuplicateNameAcrossSystems, 300);
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-    };
-  }, [f.vesselName, s.id, Vessels]);
- 
+      // ==========================================================
+      // NO DUPLICATE
+      // ==========================================================
+      if (isMounted) setIsDuplicate(false);
+
+    } catch (err) {
+      console.error('Duplicate check error:', err);
+
+      if (isMounted) setIsDuplicate(false);
+    }
+  };
+
+  const timer = setTimeout(checkDuplicateNameAcrossSystems, 300);
+
+  return () => {
+    isMounted = false;
+    clearTimeout(timer);
+  };
+}, [
+  f.vesselName,
+  f.assetCategory,
+  s.id,
+  Vessels
+]);
  const errs = useMemo(() => {
     const r = [];
     if (s.mode === 'RENEWAL' && !s.id) r.push("Validate ID first");

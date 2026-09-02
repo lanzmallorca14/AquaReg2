@@ -203,26 +203,45 @@ export const AquaRegProvider = ({
         if (personnelError) {
           console.error(personnelError);
         } else {
-          setInspectors(
-            (personnel ?? []).map((profile): Inspector => ({
-              id: profile.id,
-              idNumber: profile.id_number,
-              name: profile.name,
-              email: profile.email,
-              status: profile.profile_status,
-              position: profile.position,
-              barangay: profile.barangay,
-              age: profile.age,
-              sex: profile.sex,
-              yearsInService: profile.years_in_service,
-              cellphone: profile.cellphone,
-              createdAt: profile.created_at,
-              municipalIdImage: profile.municipal_id_image,
-              role: profile.role || 'inspector',
-              password_recovered: profile.password_recovered ?? false,
-              password_changed_at: profile.password_changed_at ?? null,
-            }))
-          );
+         setInspectors(
+  (personnel ?? []).map((profile): Inspector => ({
+    id: profile.id,
+    idNumber: profile.id_number || "",
+    name: profile.name || "",
+    email: profile.email || "",
+    status: profile.profile_status || "pending",
+    position: profile.position || "Fishery Inspector",
+    barangay: profile.barangay || "",
+    age: Number(profile.age) || 0,
+    sex: profile.sex || "Male",
+    yearsInService: Number(profile.years_in_service) || 0,
+
+    // PHONE NUMBER
+    cellphone:
+      profile.cellphone ||
+      profile.contact_number ||
+      profile.cp_number ||
+      profile.phone ||
+      "",
+
+    contact_number: profile.contact_number || null,
+    phone: profile.phone || null,
+    cp_number: profile.cp_number || null,
+
+    createdAt: profile.created_at || "",
+
+    // MUNICIPAL ID IMAGE
+    municipalIdImage: profile.municipal_id_image || null,
+
+    role: profile.role || "inspector",
+
+    password_recovered:
+      profile.password_recovered ?? false,
+
+    password_changed_at:
+      profile.password_changed_at ?? null,
+  }))
+);
 
           try {
             const { aquaOfflineDB } = await import("../../../offline/db");
@@ -247,26 +266,45 @@ export const AquaRegProvider = ({
           if (db.objectStoreNames.contains("personnel_profiles")) {
             const personnel = await db.getAll("personnel_profiles");
 
-            setInspectors(
-              personnel.map((profile: any): Inspector => ({
-                id: profile.id,
-                idNumber: profile.id_number,
-                name: profile.name,
-                email: profile.email,
-                status: profile.profile_status,
-                position: profile.position,
-                barangay: profile.barangay,
-                age: profile.age,
-                sex: profile.sex,
-                yearsInService: profile.years_in_service,
-                cellphone: profile.cellphone,
-                createdAt: profile.created_at,
-                municipalIdImage: profile.municipal_id_image,
-                role: profile.role || 'inspector',
-                password_recovered: profile.password_recovered ?? false,
-                password_changed_at: profile.password_changed_at ?? null,
-              }))
-            );
+           setInspectors(
+  (personnel ?? []).map((profile): Inspector => ({
+    id: profile.id,
+    idNumber: profile.id_number || "",
+    name: profile.name || "",
+    email: profile.email || "",
+    status: profile.profile_status || "pending",
+    position: profile.position || "Fishery Inspector",
+    barangay: profile.barangay || "",
+    age: Number(profile.age) || 0,
+    sex: profile.sex || "Male",
+    yearsInService: Number(profile.years_in_service) || 0,
+
+    // PHONE NUMBER
+    cellphone:
+      profile.cellphone ||
+      profile.contact_number ||
+      profile.cp_number ||
+      profile.phone ||
+      "",
+
+    contact_number: profile.contact_number || null,
+    phone: profile.phone || null,
+    cp_number: profile.cp_number || null,
+
+    createdAt: profile.created_at || "",
+
+    // MUNICIPAL ID IMAGE
+    municipalIdImage: profile.municipal_id_image || null,
+
+    role: profile.role || "inspector",
+
+    password_recovered:
+      profile.password_recovered ?? false,
+
+    password_changed_at:
+      profile.password_changed_at ?? null,
+  }))
+);
           }
         } catch (e) {
           console.warn("Offline DB read skipped:", e);

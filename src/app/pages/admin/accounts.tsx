@@ -61,71 +61,190 @@ export default function AccountsPage() {
   }, [supabase]);
 
 
-  useEffect(() => {
+useEffect(() => {
+  let cancelled = false;
+
   const loadInspectorImage = async () => {
+    setInspectorImageUrl("");
+
     if (!selectedInspector) {
-      setInspectorImageUrl("");
       return;
     }
 
-    const imagePath =
-      selectedInspector.idImageUrl ||
-      selectedInspector.id_image_url ||
-      "";
+    // IMPORTANT:
+    // AquaRegCONTEXT maps the database field to municipalIdImage.
+    const rawValue = selectedInspector.municipalIdImage;
 
-    if (!imagePath) {
-      setInspectorImageUrl("");
+    console.log("========================================");
+    console.log("LOADING MUNICIPAL ID IMAGE");
+    console.log("Inspector:", selectedInspector.name);
+    console.log("Raw municipalIdImage:", rawValue);
+    console.log("========================================");
+
+    if (!rawValue) {
+      console.warn(
+        "No municipal_id_image found for:",
+        selectedInspector.name
+      );
       return;
     }
 
-    const image = String(imagePath).trim();
-
-    // If database already contains a complete URL
-    if (
-      image.startsWith("http://") ||
-      image.startsWith("https://") ||
-      image.startsWith("data:image/") ||
-      image.startsWith("blob:")
-    ) {
-      setInspectorImageUrl(image);
-      return;
-    }
+    let storagePath = String(rawValue).trim();
 
     try {
-      console.log("ID storage path:", image);
+      /*
+       * ============================================================
+       * CASE 1:
+       * Database already contains a Supabase URL.
+       *
+       * Example:
+       * https://xxxxx.supabase.co/storage/v1/object/public/
+       * id-scans/USERID-123456.jpg
+       *
+       * We extract only:
+       * USERID-123456.jpg
+       * ============================================================
+       */
+      if (
+        storagePath.startsWith("http://") ||
+        storagePath.startsWith("https://")
+      ) {
+        const url = new URL(storagePath);
 
-      // Your system uses the id-scans bucket
-      const { data, error } = await supabase.storage
-        .from("id-scans")
-        .createSignedUrl(image, 3600);
+        const pathname = decodeURIComponent(url.pathname);
 
-      if (error) {
-        console.error("Unable to create ID image URL:", error);
+        console.log("Supabase URL pathname:", pathname);
 
-        // Fallback in case the bucket is public
-        const { data: publicData } = supabase.storage
-          .from("id-scans")
-          .getPublicUrl(image);
+        const bucketMarker = "/id-scans/";
 
-        if (publicData?.publicUrl) {
-          setInspectorImageUrl(publicData.publicUrl);
+        const bucketIndex = pathname.indexOf(bucketMarker);
+
+        if (bucketIndex !== -1) {
+          storagePath = pathname
+            .substring(bucketIndex + bucketMarker.length)
+            .replace(/^\/+/, "");
+
+          console.log(
+            "Extracted Storage Path:",
+            storagePath
+          );
+        } else {
+          console.error(
+            "Could not find id-scans bucket in URL:",
+            pathname
+          );
           return;
         }
+      }
 
-        setInspectorImageUrl("");
+      /*
+       * ============================================================
+       * CASE 2:
+       * Database contains:
+       *
+       * id-scans/file.jpg
+       *
+       * Remove the bucket name.
+       * ============================================================
+       */
+      if (storagePath.startsWith("id-scans/")) {
+        storagePath = storagePath.substring(
+          "id-scans/".length
+        );
+      }
+
+      /*
+       * Remove accidental leading slashes.
+       */
+      storagePath = storagePath.replace(/^\/+/, "");
+
+      /*
+       * Ignore invalid values.
+       */
+      if (!storagePath) {
+        console.error("Empty Storage Path");
         return;
       }
 
-      console.log("ID image URL:", data?.signedUrl);
+      console.log(
+        "FINAL SUPABASE STORAGE PATH:",
+        storagePath
+      );
 
-      setInspectorImageUrl(data?.signedUrl || "");
+      /*
+       * ============================================================
+       * GENERATE SIGNED URL
+       * ============================================================
+       */
+      const { data, error } = await supabase.storage
+        .from("id-scans")
+        .createSignedUrl(storagePath, 3600);
+
+      if (error) {
+        console.error(
+          "CREATE SIGNED URL ERROR:",
+          error
+        );
+
+        console.error(
+          "Failed Storage Path:",
+          storagePath
+        );
+
+        /*
+         * Try public URL as a secondary fallback.
+         */
+        const {
+          data: publicData
+        } = supabase.storage
+          .from("id-scans")
+          .getPublicUrl(storagePath);
+
+        if (publicData?.publicUrl) {
+          console.log(
+            "Trying public URL fallback:",
+            publicData.publicUrl
+          );
+
+          if (!cancelled) {
+            setInspectorImageUrl(
+              publicData.publicUrl
+            );
+          }
+        }
+
+        return;
+      }
+
+      if (data?.signedUrl) {
+        console.log(
+          "SIGNED URL CREATED SUCCESSFULLY"
+        );
+
+        if (!cancelled) {
+          setInspectorImageUrl(data.signedUrl);
+        }
+
+        return;
+      }
+
+      console.error(
+        "Supabase returned no signed URL."
+      );
+
     } catch (error) {
-      console.error("ID image loading failed:", error);
-      setInspectorImageUrl("");
+      console.error(
+        "MUNICIPAL ID IMAGE ERROR:",
+        error
+      );
     }
   };
 
   loadInspectorImage();
+
+  return () => {
+    cancelled = true;
+  };
 }, [selectedInspector, supabase]);
 
   const handleApprove = async (id: string, name: string) => {
@@ -477,32 +596,103 @@ export default function AccountsPage() {
             </div>
 
             <div className="space-y-4">
-              <div className="flex justify-center">
-                <img
-                  src={inspectorImageUrl || selectedInspector?.idImageUrl || selectedInspector?.id_image_url || "/placeholder-id.png"}
-                  alt="Municipal ID"
-                  className="w-64 h-40 object-contain rounded-xl border border-slate-300"
-                />
-              </div>
+              <div className="flex justify-center bg-slate-50 rounded-2xl p-4 border">
+  {inspectorImageUrl ? (
+    <img
+      src={inspectorImageUrl}
+      alt={`${selectedInspector?.name || "Inspector"} Municipal ID`}
+      className="w-full max-w-md h-64 object-contain rounded-xl border border-slate-300 bg-white shadow-sm"
+      onLoad={() => {
+        console.log(
+          "Municipal ID image displayed successfully."
+        );
+      }}
+      onError={(e) => {
+        console.error(
+          "MUNICIPAL ID IMAGE FAILED TO DISPLAY:",
+          e.currentTarget.src
+        );
 
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border">
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-black">Full Name</p>
-                  <p className="font-bold text-xs">{selectedInspector.name}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-black">Email</p>
-                  <p className="font-bold text-xs">{selectedInspector.email}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-black">Barangay</p>
-                  <p className="font-bold text-xs">{selectedInspector.barangay}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-black">Position</p>
-                  <p className="font-bold text-xs">{selectedInspector.position}</p>
-                </div>
-              </div>
+        setInspectorImageUrl("");
+      }}
+    />
+  ) : (
+    <div className="w-full max-w-md h-64 rounded-xl border border-dashed border-slate-300 bg-slate-100 flex flex-col items-center justify-center text-center">
+      <ShieldAlert
+        size={32}
+        className="text-slate-300 mb-2"
+      />
+
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+        Municipal ID Unavailable
+      </p>
+
+      <p className="text-[9px] text-slate-400 mt-1">
+        No accessible ID scan was found.
+      </p>
+    </div>
+  )}
+</div>
+
+             <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border">
+  <div>
+    <p className="text-[10px] text-slate-400 uppercase font-black">
+      Full Name
+    </p>
+    <p className="font-bold text-xs">
+      {selectedInspector.name || "N/A"}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-[10px] text-slate-400 uppercase font-black">
+      Email
+    </p>
+    <p className="font-bold text-xs break-all">
+      {selectedInspector.email || "N/A"}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-[10px] text-slate-400 uppercase font-black">
+      Phone Number
+    </p>
+    <p className="font-bold text-xs">
+      {selectedInspector.cellphone ||
+        selectedInspector.contact_number ||
+        selectedInspector.cp_number ||
+        selectedInspector.phone ||
+        "N/A"}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-[10px] text-slate-400 uppercase font-black">
+      Municipal ID
+    </p>
+    <p className="font-bold text-xs">
+      {selectedInspector.idNumber || "N/A"}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-[10px] text-slate-400 uppercase font-black">
+      Barangay
+    </p>
+    <p className="font-bold text-xs">
+      {selectedInspector.barangay || "N/A"}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-[10px] text-slate-400 uppercase font-black">
+      Position
+    </p>
+    <p className="font-bold text-xs">
+      {selectedInspector.position || "Fishery Inspector"}
+    </p>
+  </div>
+</div>
             </div>
 
             <div className="flex justify-end gap-3">

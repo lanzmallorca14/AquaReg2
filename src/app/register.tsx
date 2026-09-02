@@ -159,21 +159,25 @@ export default function RegisterPage() {
       const idImageUrl = idFile ? await uploadIdScan(idFile, userId) : "";
 
       // 3. PREPARE PAYLOAD
-      const payload = {
-        id: userId,
-        name: name.trim().toUpperCase(),
-        id_number: idNumber.trim(),
-        email: email.trim().toLowerCase(),
-        cellphone: cellphone.trim(),
-        position: position,
-        age: Number(age) || 0,
-        sex: sex,
-        years_in_service: Number(yearsInService) || 0,
-        barangay: barangay,
-        municipal_id_image: idImageUrl,
-        role: "inspector",
-        profile_status: "pending",
-      };
+     const payload = {
+  id: userId,
+  name: name.trim().toUpperCase(),
+  id_number: idNumber.trim(),
+  email: email.trim().toLowerCase(),
+  cellphone: cellphone.trim(),
+  position: position,
+  age: Number(age) || 0,
+  sex: sex,
+  years_in_service: Number(yearsInService) || 0,
+  barangay: barangay,
+
+  // This will now contain something like:
+  // "8d123456-abcd-1234-....-1725290000000.jpg"
+  municipal_id_image: idImageUrl,
+
+  role: "inspector",
+  profile_status: "pending",
+};
 
       // 4. INSERT INTO DATABASE
       const { error: profileError } = await supabase
@@ -194,26 +198,43 @@ export default function RegisterPage() {
   };
 
   const uploadIdScan = async (
-    file: File,
-    userId: string
-  ): Promise<string | null> => {
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${userId}-${Date.now()}.${fileExt}`;
+  file: File,
+  userId: string
+): Promise<string> => {
+  const fileExt =
+    file.name.split(".").pop()?.toLowerCase() || "jpg";
 
-    const { error } = await supabase.storage
-      .from("id-scans")
-      .upload(fileName, file);
+  const fileName = `${userId}-${Date.now()}.${fileExt}`;
 
-    if (error) throw error;
+  console.log("Uploading ID scan:", fileName);
 
-    const {
-      data: { publicUrl },
-    } = supabase.storage
-      .from("id-scans")
-      .getPublicUrl(fileName);
+  const { error } = await supabase.storage
+    .from("id-scans")
+    .upload(fileName, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type || "image/jpeg",
+    });
 
-    return publicUrl;
-  };
+  if (error) {
+    console.error(
+      "ID SCAN UPLOAD ERROR:",
+      error
+    );
+
+    throw error;
+  }
+
+  console.log(
+    "ID scan uploaded successfully:",
+    fileName
+  );
+
+  // IMPORTANT:
+  // Store the Storage object path in the database.
+  // Do NOT store getPublicUrl().
+  return fileName;
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50/40 to-indigo-50/50 flex flex-col items-center justify-center p-6 font-sans relative overflow-hidden">
@@ -473,4 +494,4 @@ function SectionDivider({ label }: { label: string }) {
       <div className="h-[1px] bg-white/90 flex-1" />
     </div>
   );
-}
+}  
