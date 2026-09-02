@@ -3,8 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   User, Lock, MapPin, Phone, ShieldCheck, Mail, UploadCloud, 
   Trash2, ShieldAlert, ChevronLeft, AlertCircle, CheckCircle2,
-  Eye, EyeOff, BadgeAlert, Briefcase, Calendar, Heart, Award, CreditCard,
-  FileCheck
+  Eye, EyeOff, BadgeAlert, Briefcase, Calendar, Heart, Award, CreditCard
 } from 'lucide-react';
 
 import { Input } from './components/ui/input'; 
@@ -573,7 +572,7 @@ function FormSelect({ id, label, icon, value, options, onChange, placeholder }: 
 interface FileUploadZoneProps {
   previewUrl: string | null;
   dragActive: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
   onDragActiveChange: (active: boolean) => void;
   onFileSelect: (file: File) => void;
   onClearFile: () => void;
