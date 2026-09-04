@@ -50,9 +50,9 @@ import { QRCodeSVG } from "qrcode.react";
 type SubType =
   | 'MOTORIZED'
   | 'NON-MOTORIZED'
-  | 'PANGULONG'
   | 'FISHING GEAR'
-  | 'PAYAO/BALSA';
+  | 'PAYAO/BALSA'
+  | 'PANGULONG';
 
 
 interface VesselDataState {
@@ -749,67 +749,34 @@ export default function ManualPermitPortal() {
       ).toUpperCase();
 
 
-    let detectedType:
-      SubType = "MOTORIZED";
+ let detectedType: SubType = "MOTORIZED";
+
+if (
+  assetCat.includes("PANGULONG") ||
+  gearType.includes("PANGULONG")
+) {
+  detectedType = "PANGULONG";
+} else if (
+  assetCat.includes("PAYAO") ||
+  assetCat.includes("BALSA")
+) {
+  detectedType = "PAYAO/BALSA";
+} else if (
+  assetCat.includes("GEAR") ||
+  assetCat.includes("FISHING") ||
+  gearType.trim() !== ""
+) {
+  // ANY fishing gear saved in gear_type
+  // will be treated as FISHING GEAR.
+  detectedType = "FISHING GEAR";
+} else if (Boolean(vesselRecord.is_motorized)) {
+  detectedType = "MOTORIZED";
+} else {
+  detectedType = "NON-MOTORIZED";
+}
 
 
-    if (
-      assetCat.includes(
-        "PANGULONG"
-      ) ||
-      gearType.includes(
-        "PANGULONG"
-      )
-    ) {
-
-      detectedType =
-        "PANGULONG";
-
-    } else if (
-      assetCat.includes(
-        "PAYAO"
-      ) ||
-      assetCat.includes(
-        "BALSA"
-      )
-    ) {
-
-      detectedType =
-        "PAYAO/BALSA";
-
-    } else if (
-      assetCat.includes(
-        "GEAR"
-      ) ||
-      assetCat.includes(
-        "FISHING"
-      )
-    ) {
-
-      detectedType =
-        "FISHING GEAR";
-
-    } else if (
-      Boolean(
-        vesselRecord.is_motorized
-      )
-    ) {
-
-      detectedType =
-        "MOTORIZED";
-
-    } else {
-
-      detectedType =
-        "NON-MOTORIZED";
-
-    }
-
-
-    setSubType(
-      detectedType
-    );
-
+    setSubType(detectedType);
 
     const today =
       new Date().toLocaleDateString(
@@ -905,30 +872,18 @@ export default function ManualPermitPortal() {
           ""
         ),
 
-
-      vesselName:
-        detectedType ===
-        "PAYAO/BALSA"
-
-          ? String(
-              vesselRecord.payao_vessel_name ||
-              vesselRecord.vessel_name ||
-              ""
-            ).toUpperCase()
-
-          : detectedType ===
-            "FISHING GEAR"
-
-            ? String(
-                vesselRecord.gear_type ||
-                vesselRecord.vessel_name ||
-                "FISHING GEAR"
-              ).toUpperCase()
-
-            : String(
-                vesselRecord.vessel_name ||
-                "UNNAMED"
-              ).toUpperCase(),
+vesselName:
+  detectedType === "PAYAO/BALSA"
+    ? String(
+        vesselRecord.payao_vessel_name ||
+        vesselRecord.vessel_name ||
+        ""
+      ).toUpperCase()
+    : String(
+        vesselRecord.vessel_name ||
+        permit?.vessel_name ||
+        "UNNAMED"
+      ).toUpperCase(),
 
 
       ownerName:
@@ -1092,11 +1047,12 @@ export default function ManualPermitPortal() {
         today,
 
 
-      gearCategory:
-        String(
-          vesselRecord.gear_type ||
-          "JIGGING"
-        ).toUpperCase()
+     gearCategory:
+  String(
+    vesselRecord.gear_type ||
+    permit?.gear_type ||
+    ""
+  ).toUpperCase(),
 
     });
 
@@ -2772,11 +2728,7 @@ const handleFinishEdit = async () => {
 
                 {(
                   subType ===
-                    "FISHING GEAR" ||
-                  subType ===
-                    "PANGULONG" ||
-                  subType ===
-                    "PAYAO/BALSA"
+                    "FISHING GEAR" ||subType ==="PAYAO/BALSA"||subType === "PANGULONG"
                 ) && (
 
                   <div className="space-y-3 border-t pt-4">
@@ -3825,41 +3777,29 @@ const handleFinishEdit = async () => {
                         )}
 
                       </div>
+                      ) : subType === "PANGULONG" ? (
 
-                    ) : subType ===
-                      "PANGULONG" ? (
+  /* PANGULONG */
+  <div className="text-center">
 
-                      <div className="text-center">
+    <p className="text-3xl font-black uppercase italic text-black whitespace-nowrap">
+      {data.unitsInWords || "PANGULONG"}
+    </p>
 
-                        {data.unitsInWords && (
+  </div>
 
-                          <p className="text-3xl font-black uppercase italic text-black whitespace-nowrap">
 
-                            {data.unitsInWords}
+                      ) :subType === "FISHING GEAR" ? (
 
-                          </p>
+  <div className="text-center">
 
-                        )}
+    <p className="text-3xl font-black italic uppercase text-black whitespace-nowrap">
+      {data.unitsInWords || data.gearCategory || "N/A"}
+    </p>
 
-                      </div>
+  </div>
 
-                    ) : subType ===
-                      "FISHING GEAR" ? (
-
-                      <div className="text-center">
-
-                        <p className="text-3xl font-black italic uppercase text-black">
-
-                          {data.unitsInWords ||
-                            data.gearCategory ||
-                            "FISHING GEAR"}
-
-                        </p>
-
-                      </div>
-
-                    ) : (
-
+) : (
                       <div className="flex justify-center items-center gap-3 flex-wrap">
 
                         <p className="text-3xl font-black uppercase underline decoration-[3px] underline-offset-[12px] italic text-blue-900">
@@ -3941,50 +3881,46 @@ const handleFinishEdit = async () => {
                 <div className="max-w-xl mx-auto space-y-2 pt-0 -mt-8 text-center text-xs font-bold font-sans uppercase tracking-tighter leading-relaxed">
 
 
-                  {subType ===
-                  "PANGULONG" ? (
+             {/* ORDINANCE / LEGAL BASIS */}
+{(() => {
+  const type = String(subType || "").toUpperCase().trim();
 
-                    <p className="text-center text-sm font-serif leading-relaxed">
+  if (type === "FISHING GEAR") {
+    return (
+      <p className="text-center text-sm font-serif leading-relaxed">
+        For the period ending the year 2026 pursuant to the provisions of Municipal
+        <br />
+        Ordinance No. 12- 2006 otherwise known as the Comprehensive Municipal Fishery Ordinance.
+      </p>
+    );
+  }
 
-                      For the period ending the year 2026 pursuant to the provisions of
-                      Municipal Ordinance No. 01-2023 amending Section 61 of Ordinance No.
-                      12-2006 otherwise known as the Comprehensive Municipal Fishery
-                      Ordinance and Ordinance No. 13-2025.
+  if (type === "PAYAO/BALSA") {
+    return (
+      <p className="text-center text-sm font-serif leading-relaxed">
+        For the period ending the year 2026 pursuant to the provisions of Municipal
+        <br />
+        Ordinance No. 01-2023 amending Section 61 of Ordinance No. 12- 2006 otherwise known as the
+        <br />
+        Comprehensive Municipal Fishery Ordinance.
+      </p>
+    );
+  }
 
-                    </p>
+  if (type === "PANGULONG" || type === "PG") {
+    return (
+      <p className="text-center text-sm font-serif leading-relaxed">
+        For the period ending the year 2026 pursuant to the provisions of Municipal
+        <br />
+        Ordinance No. 01-2023 amending Section 61 of Ordinance No. 12- 2006 otherwise known as the
+        <br />
+        Comprehensive Municipal Fishery Ordinance and Ordinance No. 13-2025.
+      </p>
+    );
+  }
 
-                  ) : subType ===
-                    "FISHING GEAR" ||
-                    subType ===
-                    "PAYAO/BALSA" ? (
-
-                    <p>
-
-                      For the period ending the year 2026<br />
-
-                      pursuant to the provisions of Municipal Ordinance No. 01 -2023 amending<br />
-
-                      Section 61 of Ordinance No. 12- 2006 otherwise known as the<br />
-
-                      Comprehensive Municipal Fishery Ordinance.
-
-                    </p>
-
-                  ) : (
-
-                    <p>
-
-                      For the period ending the year 2026<br />
-
-                      pursuant to the provisions of Municipal Ordinance No. 01 -2023 amending<br />
-
-                      Section 61 of Ordinance No. 12- 2006 otherwise known as the<br />
-
-                      Comprehensive Municipal Fishery Ordinance and Ordinance No. 13-2025.
-
-                    </p>
-
-                  )}
+  return null;
+})()}
 
                 </div>
 
@@ -3997,8 +3933,7 @@ const handleFinishEdit = async () => {
 
               <div
                 className={`grid grid-cols-2 gap-x-2 gap-y-1 text-xs -ml-10 ${
-                  subType === "FISHING GEAR" ||
-                  subType === "PANGULONG"
+                  subType === "FISHING GEAR" 
                     ? "mt-24"
                     : "mt-10"
                 }`}

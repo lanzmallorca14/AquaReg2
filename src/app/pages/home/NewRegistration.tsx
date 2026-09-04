@@ -19,9 +19,9 @@ import { supabase } from './../../../supabaseClient';
 import { saveOfflineImage } from '../../../offline/db'; 
 
 const GEARS = [ 
-  'JIGGING', 'PAILAWAN', 'SPEAR GUN', 'TABUNAN',  
+  'FISH JIGGING', 'PAILAWAN', 'SPEAR GUN', 'TABUNAN',  
   'GILL NET (LANGARITE)', 'GILL NET (PANGTAPUYOK)',  
-  'GILL NET (PANAMBA)', 'RING NET (PANGULONG)' 
+  'GILL NET (PANAMBA)', 'GILL NET (PANGBYANWAG)' 
 ]; 
 
 const BARANGAYS = [ 
@@ -1269,7 +1269,7 @@ export default function AquaRegNewRegistration() {
                         readOnly
                         value={formatGearUnits(f.unitCount, f.gearType || 'FISHING GEAR')}
                         className="h-10 font-black bg-white"
-                        placeholder="ONE (1) UNIT JIGGING"
+                        placeholder="ONE (1) UNIT FISH JIGGING"
                       />
                     </div>
                   </div>
