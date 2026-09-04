@@ -1397,443 +1397,630 @@ const handleFinishEdit = async () => {
 
   /* ============================================================
      EXPORT WPS / PDF
+     ------------------------------------------------------------
+     IMPORTANT:
+     Do NOT depend on Tailwind's generated CSS being available to
+     html2canvas's cloned document. Vercel/production builds can
+     produce different stylesheet timing/order than localhost.
+
+     We therefore:
+       1. Clone the visible permit.
+       2. Inline every computed style into the clone.
+       3. Give the clone fixed paper dimensions.
+       4. Wait for fonts/images.
+       5. Capture the styled clone.
+     This keeps the localhost appearance when deployed to Vercel.
   ============================================================ */
 
-  const handleExportWPS =
-    async () => {
+  const handleExportWPS = async () => {
+    const printElement =
+      document.getElementById("permit-document") as HTMLElement | null;
 
-      const printElement =
-        document.getElementById(
-          "permit-document"
-        );
+    if (!printElement) {
+      toast.error("Permit document not found.");
+      return;
+    }
 
+    let exportHost: HTMLElement | null = null;
 
-      if (!printElement) {
+    try {
+      toast.loading("Preparing WPS document...", {
+        id: "wps-export"
+      });
 
-        toast.error(
-          "Permit document not found."
-        );
+      /* ----------------------------------------------------------
+         PAPER SIZE
+      ---------------------------------------------------------- */
 
-        return;
+      const isCertificate = isVesselType;
+
+      const pageWidth = isCertificate ? 215.9 : 210;
+      const pageHeight = isCertificate ? 355.6 : 297;
+
+      const MM_TO_PX = 96 / 25.4;
+
+      const captureWidth = Math.round(
+        pageWidth * MM_TO_PX
+      );
+
+      const captureHeight = Math.round(
+        pageHeight * MM_TO_PX
+      );
+
+      /* ----------------------------------------------------------
+         WAIT FOR FONTS
+      ---------------------------------------------------------- */
+
+      if ("fonts" in document) {
+        try {
+          await document.fonts.ready;
+        } catch (fontError) {
+          console.warn(
+            "Font loading warning:",
+            fontError
+          );
+        }
       }
 
+      /* ----------------------------------------------------------
+         WAIT FOR THE ORIGINAL ELEMENT TO FINISH LAYOUT
+      ---------------------------------------------------------- */
 
-      try {
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 100);
+          });
+        });
+      });
 
-        toast.loading(
-          "Preparing WPS document...",
-          {
-            id: "wps-export"
-          }
-        );
+      /* ----------------------------------------------------------
+         DEEP CLONE
+         ---------------------------------------------------------- */
 
+      exportHost =
+        printElement.cloneNode(true) as HTMLElement;
 
-        /* WAIT FOR FONTS */
+      exportHost.removeAttribute("id");
+      exportHost.id = "permit-document-export";
 
-        if ("fonts" in document) {
+      /*
+       * Keep the clone in the DOM because html2canvas needs a real
+       * rendered element. Put it far outside the visible page.
+       */
+      exportHost.style.position = "fixed";
+      exportHost.style.left = "-100000px";
+      exportHost.style.top = "0";
+      exportHost.style.margin = "0";
+      exportHost.style.padding =
+        printElement.style.padding || exportHost.style.padding;
+      exportHost.style.width =
+        `${pageWidth}mm`;
+      exportHost.style.height =
+        `${pageHeight}mm`;
+      exportHost.style.minWidth =
+        `${pageWidth}mm`;
+      exportHost.style.minHeight =
+        `${pageHeight}mm`;
+      exportHost.style.maxWidth = "none";
+      exportHost.style.maxHeight = "none";
+      exportHost.style.boxSizing = "border-box";
+      exportHost.style.transform = "none";
+      exportHost.style.overflow = "hidden";
+      exportHost.style.visibility = "visible";
+      exportHost.style.display = "block";
+      exportHost.style.opacity = "1";
+      exportHost.style.backgroundColor = "#ffffff";
+      exportHost.style.color = "#000000";
+      exportHost.style.zIndex = "-1";
+
+      /* ----------------------------------------------------------
+         INLINE COMPUTED STYLES
+
+         This is the key Vercel fix. Every Tailwind-generated
+         property is converted to an inline style so html2canvas
+         does not have to resolve production CSS again.
+      ---------------------------------------------------------- */
+
+      const inlineComputedStyles = (
+        source: Element,
+        target: Element
+      ) => {
+        const sourceHTMLElement =
+          source as HTMLElement;
+
+        const targetHTMLElement =
+          target as HTMLElement;
+
+        const computed =
+          window.getComputedStyle(
+            sourceHTMLElement
+          );
+
+        /*
+         * Copy every computed CSS property.
+         * Inline styles have higher priority than Tailwind classes.
+         */
+        for (let i = 0; i < computed.length; i++) {
+          const property =
+            computed.item(i);
+
+          if (!property) continue;
+
+          const value =
+            computed.getPropertyValue(property);
+
+          const priority =
+            computed.getPropertyPriority(property);
 
           try {
-
-            await document.fonts.ready;
-
-          } catch (
-            fontError
-          ) {
-
-            console.warn(
-              "Font loading warning:",
-              fontError
+            targetHTMLElement.style.setProperty(
+              property,
+              value,
+              priority
             );
-
+          } catch {
+            /* Ignore individual unsupported CSS properties. */
           }
         }
 
+        /*
+         * Force the clone to remain visible.
+         * Some production/print CSS may contain display/visibility
+         * rules that html2canvas would otherwise inherit.
+         */
+        targetHTMLElement.style.setProperty(
+          "visibility",
+          "visible",
+          "important"
+        );
 
-        /* WAIT FOR IMAGES */
+        targetHTMLElement.style.setProperty(
+          "print-color-adjust",
+          "exact",
+          "important"
+        );
 
-        const images =
+        targetHTMLElement.style.setProperty(
+          "-webkit-print-color-adjust",
+          "exact",
+          "important"
+        );
+
+        const sourceChildren =
           Array.from(
-            printElement.querySelectorAll(
-              "img"
-            )
+            source.children
           );
 
+        const targetChildren =
+          Array.from(
+            target.children
+          );
 
-        await Promise.all(
-          images.map(
-            img => {
+        for (
+          let i = 0;
+          i < sourceChildren.length;
+          i++
+        ) {
+          const sourceChild =
+            sourceChildren[i];
 
+          const targetChild =
+            targetChildren[i];
+
+          if (
+            sourceChild &&
+            targetChild
+          ) {
+            inlineComputedStyles(
+              sourceChild,
+              targetChild
+            );
+          }
+        }
+      };
+
+      /*
+       * First copy all computed styles from the original screen
+       * version. This preserves the exact localhost appearance.
+       */
+      inlineComputedStyles(
+        printElement,
+        exportHost
+      );
+
+      /* ----------------------------------------------------------
+         RE-APPLY PAPER GEOMETRY AFTER COPYING COMPUTED STYLES
+      ---------------------------------------------------------- */
+
+      exportHost.style.position = "fixed";
+      exportHost.style.left = "-100000px";
+      exportHost.style.top = "0";
+      exportHost.style.margin = "0";
+      exportHost.style.width =
+        `${pageWidth}mm`;
+      exportHost.style.height =
+        `${pageHeight}mm`;
+      exportHost.style.minWidth =
+        `${pageWidth}mm`;
+      exportHost.style.minHeight =
+        `${pageHeight}mm`;
+      exportHost.style.maxWidth = "none";
+      exportHost.style.maxHeight = "none";
+      exportHost.style.boxSizing = "border-box";
+      exportHost.style.transform = "none";
+      exportHost.style.overflow = "hidden";
+      exportHost.style.visibility = "visible";
+      exportHost.style.display = "block";
+      exportHost.style.opacity = "1";
+      exportHost.style.backgroundColor = "#ffffff";
+
+      /* ----------------------------------------------------------
+         REMOVE RESPONSIVE/PRINT BEHAVIOR FROM THE EXPORT ROOT
+
+         The export is already styled inline. These classes can
+         otherwise react to Vercel's viewport during capture.
+      ---------------------------------------------------------- */
+
+      exportHost.classList.remove(
+        "md:w-80",
+        "md:p-12",
+        "md:flex-row",
+        "md:flex",
+        "print:m-0",
+        "print:bg-transparent"
+      );
+
+      /* ----------------------------------------------------------
+         PREPARE IMAGES
+
+         Keep image URLs intact but explicitly request CORS on the
+         cloned images. This is especially important for deployed
+         Vercel -> Supabase Storage images.
+      ---------------------------------------------------------- */
+
+      const clonedImages =
+        Array.from(
+          exportHost.querySelectorAll(
+            "img"
+          )
+        );
+
+      clonedImages.forEach(img => {
+        img.crossOrigin = "anonymous";
+        img.decoding = "sync";
+
+        img.style.visibility = "visible";
+        img.style.display = "block";
+        img.style.opacity = "1";
+      });
+
+      /*
+       * Append only after all export styling has been applied.
+       */
+      document.body.appendChild(
+        exportHost
+      );
+
+      /* ----------------------------------------------------------
+         WAIT FOR IMAGES
+      ---------------------------------------------------------- */
+
+      await Promise.all(
+        clonedImages.map(
+          img =>
+            new Promise<void>(resolve => {
               if (
                 img.complete &&
                 img.naturalWidth > 0
               ) {
-
-                return Promise.resolve();
-
+                resolve();
+                return;
               }
 
+              let finished = false;
 
-              return new Promise<void>(
-                resolve => {
+              const done = () => {
+                if (finished) return;
 
-                  const done =
-                    () =>
-                      resolve();
+                finished = true;
 
-
-                  img.addEventListener(
-                    "load",
-                    done,
-                    {
-                      once: true
-                    }
-                  );
-
-
-                  img.addEventListener(
-                    "error",
-                    done,
-                    {
-                      once: true
-                    }
-                  );
-
-
-                  setTimeout(
-                    resolve,
-                    3000
-                  );
-
-                }
-              );
-            }
-          )
-        );
-
-
-        /* WAIT FOR LAYOUT */
-
-        await new Promise<void>(
-          resolve => {
-
-            requestAnimationFrame(
-              () => {
-
-                requestAnimationFrame(
-                  () => {
-
-                    setTimeout(
-                      resolve,
-                      150
-                    );
-
-                  }
+                img.removeEventListener(
+                  "load",
+                  done
                 );
 
-              }
-            );
+                img.removeEventListener(
+                  "error",
+                  done
+                );
 
-          }
-        );
+                resolve();
+              };
 
-
-        /* PAPER SIZE */
-
-        const isCertificate =
-          isVesselType;
-
-
-        const pageWidth =
-          isCertificate
-            ? 215.9
-            : 210;
-
-
-        const pageHeight =
-          isCertificate
-            ? 355.6
-            : 297;
-
-
-        /* PX CONVERSION */
-
-        const MM_TO_PX =
-          96 / 25.4;
-
-        const IN_TO_PX =
-          96;
-
-
-        const captureWidth =
-          isCertificate
-            ? Math.round(
-                215.9 *
-                MM_TO_PX
-              )
-            : Math.round(
-                8.27 *
-                IN_TO_PX
+              img.addEventListener(
+                "load",
+                done,
+                { once: true }
               );
 
-
-        const captureHeight =
-          isCertificate
-            ? Math.round(
-                355.6 *
-                MM_TO_PX
-              )
-            : Math.round(
-                11.69 *
-                IN_TO_PX
+              img.addEventListener(
+                "error",
+                done,
+                { once: true }
               );
 
+              setTimeout(
+                done,
+                5000
+              );
+            })
+        )
+      );
 
-        /* CAPTURE */
+      /* ----------------------------------------------------------
+         WAIT FOR FINAL CLONE LAYOUT
+      ---------------------------------------------------------- */
 
-        const canvas =
-          await html2canvas(
-            printElement,
-            {
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 150);
+          });
+        });
+      });
 
-              scale: 2,
+      /* ----------------------------------------------------------
+         CAPTURE
+      ---------------------------------------------------------- */
 
-              useCORS: true,
+      const canvas =
+        await html2canvas(
+          exportHost,
+          {
+            scale: 2,
 
-              allowTaint: false,
+            useCORS: true,
 
-              backgroundColor:
-                "#ffffff",
+            allowTaint: false,
 
-              logging: false,
+            backgroundColor:
+              "#ffffff",
 
-              width:
-                captureWidth,
+            logging: false,
 
-              height:
-                captureHeight,
+            width:
+              captureWidth,
 
-              windowWidth:
-                captureWidth,
+            height:
+              captureHeight,
 
-              windowHeight:
-                captureHeight,
+            /*
+             * Use the paper viewport, not the user's browser
+             * viewport. Because all important styles are inline,
+             * responsive Tailwind rules cannot destroy the layout.
+             */
+            windowWidth:
+              captureWidth,
 
-              scrollX: 0,
+            windowHeight:
+              captureHeight,
 
-              scrollY: 0,
+            scrollX: 0,
 
-              imageTimeout:
-                15000,
+            scrollY: 0,
 
+            imageTimeout:
+              20000,
 
-              onclone:
-                (
-                  clonedDocument
-                ) => {
+            removeContainer:
+              true,
 
-                  const clonedElement =
-                    clonedDocument.getElementById(
-                      "permit-document"
-                    );
+            onclone: (
+              clonedDocument
+            ) => {
+              const clonedElement =
+                clonedDocument.getElementById(
+                  "permit-document-export"
+                );
 
+              if (!clonedElement)
+                return;
 
-                  if (!clonedElement)
-                    return;
+              clonedElement.style.width =
+                `${pageWidth}mm`;
 
+              clonedElement.style.height =
+                `${pageHeight}mm`;
 
-                  clonedElement.style.width =
-                    isCertificate
-                      ? "215.9mm"
-                      : "8.27in";
+              clonedElement.style.minWidth =
+                `${pageWidth}mm`;
 
+              clonedElement.style.minHeight =
+                `${pageHeight}mm`;
 
-                  clonedElement.style.height =
-                    isCertificate
-                      ? "355.6mm"
-                      : "11.69in";
+              clonedElement.style.maxWidth =
+                "none";
 
+              clonedElement.style.maxHeight =
+                "none";
 
-                  clonedElement.style.minWidth =
-                    isCertificate
-                      ? "215.9mm"
-                      : "8.27in";
+              clonedElement.style.margin =
+                "0";
 
+              clonedElement.style.transform =
+                "none";
 
-                  clonedElement.style.minHeight =
-                    isCertificate
-                      ? "355.6mm"
-                      : "11.69in";
+              clonedElement.style.position =
+                "relative";
 
+              clonedElement.style.left =
+                "0";
 
-                  clonedElement.style.maxWidth =
-                    "none";
+              clonedElement.style.top =
+                "0";
 
+              clonedElement.style.boxSizing =
+                "border-box";
 
-                  clonedElement.style.maxHeight =
-                    "none";
+              clonedElement.style.overflow =
+                "hidden";
 
+              clonedElement.style.backgroundColor =
+                "#ffffff";
 
-                  clonedElement.style.margin =
-                    "0";
+              clonedElement.style.visibility =
+                "visible";
 
+              clonedElement.style.display =
+                "block";
 
-                  clonedElement.style.transform =
-                    "none";
+              clonedElement.style.opacity =
+                "1";
 
+              clonedElement.style.setProperty(
+                "print-color-adjust",
+                "exact",
+                "important"
+              );
 
-                  clonedElement.style.position =
-                    "relative";
+              clonedElement.style.setProperty(
+                "-webkit-print-color-adjust",
+                "exact",
+                "important"
+              );
 
+              /*
+               * Re-assert visibility on every descendant.
+               */
+              const allElements =
+                clonedElement.querySelectorAll(
+                  "*"
+                );
 
-                  clonedElement.style.boxSizing =
-                    "border-box";
+              allElements.forEach(
+                element => {
+                  const el =
+                    element as HTMLElement;
 
-
-                  clonedElement.style.overflow =
-                    "hidden";
-
-
-                  clonedElement.style.backgroundColor =
-                    "#ffffff";
-
-
-                  clonedElement.classList.remove(
-                    "md:w-80",
-                    "md:p-12",
-                    "md:flex-row",
-                    "md:flex"
+                  el.style.setProperty(
+                    "visibility",
+                    "visible",
+                    "important"
                   );
 
-
-                  const allElements =
-                    clonedElement.querySelectorAll(
-                      "*"
-                    );
-
-
-                  allElements.forEach(
-                    element => {
-
-                      const el =
-                        element as HTMLElement;
-
-
-                      el.style.visibility =
-                        "visible";
-
-
-                      el.style.printColorAdjust =
-                        "exact";
-
-                    }
+                  el.style.setProperty(
+                    "print-color-adjust",
+                    "exact",
+                    "important"
                   );
 
-
-                  const clonedImages =
-                    clonedElement.querySelectorAll(
-                      "img"
-                    );
-
-
-                  clonedImages.forEach(
-                    img => {
-
-                      img.style.visibility =
-                        "visible";
-
-                      img.style.display =
-                        "block";
-
-                    }
+                  el.style.setProperty(
+                    "-webkit-print-color-adjust",
+                    "exact",
+                    "important"
                   );
-
                 }
+              );
 
+              const images =
+                clonedElement.querySelectorAll(
+                  "img"
+                );
+
+              images.forEach(img => {
+                img.style.visibility =
+                  "visible";
+
+                img.style.display =
+                  "block";
+
+                img.crossOrigin =
+                  "anonymous";
+              });
             }
-          );
-
-
-        /* CREATE PDF */
-
-        const pdf =
-          new jsPDF(
-            {
-
-              orientation:
-                "portrait",
-
-              unit: "mm",
-
-              format: [
-                pageWidth,
-                pageHeight
-              ],
-
-              compress: true
-
-            }
-          );
-
-
-        const imageData =
-          canvas.toDataURL(
-            "image/jpeg",
-            0.98
-          );
-
-
-        pdf.addImage(
-          imageData,
-          "JPEG",
-          0,
-          0,
-          pageWidth,
-          pageHeight,
-          undefined,
-          "FAST"
-        );
-
-
-        /* FILE NAME */
-
-        const fileName =
-          isCertificate
-
-            ? `Certificate-${data.certificateNo || data.registrationId || "Permit"}.pdf`
-
-            : `Mayors-Permit-${data.officialNo || data.registrationId || "Permit"}.pdf`;
-
-
-        pdf.save(
-          fileName
-        );
-
-
-        toast.success(
-          "WPS/PDF exported successfully.",
-          {
-            id: "wps-export"
           }
         );
 
+      /* ----------------------------------------------------------
+         CREATE PDF
+      ---------------------------------------------------------- */
 
-      } catch (error) {
+      const pdf =
+        new jsPDF({
+          orientation:
+            "portrait",
 
-        console.error(
-          "WPS EXPORT ERROR:",
-          error
+          unit: "mm",
+
+          format: [
+            pageWidth,
+            pageHeight
+          ],
+
+          compress: true
+        });
+
+      const imageData =
+        canvas.toDataURL(
+          "image/jpeg",
+          0.98
         );
 
+      pdf.addImage(
+        imageData,
+        "JPEG",
+        0,
+        0,
+        pageWidth,
+        pageHeight,
+        undefined,
+        "FAST"
+      );
 
-        toast.error(
-          "Failed to export permit.",
-          {
-            id: "wps-export"
-          }
+      /* ----------------------------------------------------------
+         FILE NAME
+      ---------------------------------------------------------- */
+
+      const fileName =
+        isCertificate
+          ? `Certificate-${data.certificateNo || data.registrationId || "Permit"}.pdf`
+          : `Mayors-Permit-${data.officialNo || data.registrationId || "Permit"}.pdf`;
+
+      pdf.save(fileName);
+
+      toast.success(
+        "WPS/PDF exported successfully.",
+        {
+          id: "wps-export"
+        }
+      );
+
+    } catch (error) {
+      console.error(
+        "WPS EXPORT ERROR:",
+        error
+      );
+
+      toast.error(
+        "Failed to export permit.",
+        {
+          id: "wps-export"
+        }
+      );
+
+    } finally {
+      /*
+       * Always remove the temporary clone.
+       * This prevents memory/layout buildup after repeated exports.
+       */
+      if (exportHost?.parentNode) {
+        exportHost.parentNode.removeChild(
+          exportHost
         );
-
       }
-    };
+    }
+  };
 
 
   /* ============================================================
