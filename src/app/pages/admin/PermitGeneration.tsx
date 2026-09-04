@@ -1311,68 +1311,123 @@ export default function ManualPermitPortal() {
      FINISH EDIT
   ============================================================ */
 
-  const handleFinishEdit =
-    async () => {
+ /* ============================================================
+   FINISH EDIT + SYNC PERMIT FEE
+============================================================ */
 
-      try {
+const handleFinishEdit = async () => {
+  try {
+    if (!vesselId) return;
 
-        if (!vesselId)
-          return;
+    /* -----------------------------------------
+       CLEAN PERMIT FEE
+    ----------------------------------------- */
 
+    const cleanPermitFee = Number(
+      String(data.permitFee || "0").replace(/,/g, "")
+    );
 
-        await updateVessel(
-          vesselId,
-          {
+    if (Number.isNaN(cleanPermitFee)) {
+      toast.error("Invalid permit fee.");
+      return;
+    }
 
-            boat_name:
-              data.boatName,
+    /* -----------------------------------------
+       UPDATE VESSEL
+       gear_type belongs here
+    ----------------------------------------- */
 
-            number_of_boats:
-              data.numberOfBoats,
+    await updateVessel(vesselId, {
+      boat_name: data.boatName,
+      number_of_boats: data.numberOfBoats,
+      units_in_words: data.unitsInWords,
+      permit_fee: String(cleanPermitFee),
+      gear_type: data.gearCategory,
+    });
 
-            units_in_words:
-              data.unitsInWords,
+    /* -----------------------------------------
+       FIND EXISTING PERMIT
+    ----------------------------------------- */
 
-            permit_fee:
-              String(
-                Number(
-                  data.permitFee
-                    ?.replace(
-                      /,/g,
-                      ''
-                    ) || 0
-                )
-              ),
+    const {
+      data: existingPermit,
+      error: permitFindError,
+    } = await supabase
+      .from("permit_management")
+      .select("id")
+      .eq("asset_id", vesselId)
+      .limit(1)
+      .maybeSingle();
 
-            gear_type:
-              data.gearCategory
+    if (permitFindError) {
+      throw permitFindError;
+    }
 
-          }
-        );
+    /* -----------------------------------------
+       UPDATE PERMIT MANAGEMENT
+       ONLY use columns that exist
+    ----------------------------------------- */
 
+    if (existingPermit?.id) {
+      const {
+        error: permitUpdateError,
+      } = await supabase
+        .from("permit_management")
+        .update({
+          permit_fee: cleanPermitFee,
+        })
+        .eq("id", existingPermit.id);
 
-        setIsEditable(
-          false
-        );
-
-
-        toast.success(
-          "Terminal Synced"
-        );
-
-      } catch (error) {
-
-        console.error(
-          "SYNC ERROR:",
-          error
-        );
-
-        toast.error(
-          "Failed to sync data"
-        );
+      if (permitUpdateError) {
+        throw permitUpdateError;
       }
-    };
+    }
 
+    /* -----------------------------------------
+       UPDATE LOCAL STATE
+       Layout changes immediately
+    ----------------------------------------- */
+
+    setData(prev => ({
+      ...prev,
+      permitFee: cleanPermitFee.toLocaleString("en-US"),
+    }));
+
+    /* -----------------------------------------
+       REFRESH PERMIT DATA
+    ----------------------------------------- */
+
+    const {
+      data: refreshedPermits,
+      error: refreshError,
+    } = await supabase
+      .from("permit_management")
+      .select("*");
+
+    if (refreshError) {
+      throw refreshError;
+    }
+
+    setPermits(refreshedPermits || []);
+
+    /* -----------------------------------------
+       FINISH
+    ----------------------------------------- */
+
+    setIsEditable(false);
+
+    toast.success(
+      "Permit details and fee successfully synced."
+    );
+
+  } catch (error) {
+    console.error("SYNC ERROR:", error);
+
+    toast.error(
+      "Failed to sync permit details."
+    );
+  }
+};
 
   /* ============================================================
      QR VERIFICATION URL
@@ -2733,30 +2788,28 @@ export default function ManualPermitPortal() {
                     </Label>
 
 
-                    <Input
+                  <Input
+  type="text"
+  value={data.permitFee}
+  onChange={e => {
+    const rawValue = e.target.value.replace(/,/g, "");
 
-                      type="text"
+    // Allow only numbers and decimal point
+    if (!/^\d*\.?\d*$/.test(rawValue)) {
+      return;
+    }
 
-                      value={
-                        data.permitFee
-                      }
-
-                      onChange={
-                        e =>
-                          setData(
-                            prev => ({
-                              ...prev,
-                              permitFee:
-                                formatMoney(
-                                  e.target.value
-                                )
-                            })
-                          )
-                      }
-
-                      placeholder="100,000,000"
-
-                    />
+    setData(prev => ({
+      ...prev,
+      permitFee: rawValue
+        ? Number(rawValue).toLocaleString("en-US", {
+            maximumFractionDigits: 2,
+          })
+        : "",
+    }));
+  }}
+  placeholder="100,000,000"
+/>
 
                   </div>
 
@@ -3960,15 +4013,9 @@ export default function ManualPermitPortal() {
                     PERMIT FEE:
                   </span>
 
-                  <span className="ml-1">
-
-                    ₱
-                    {Number(
-                      data.permitFee ||
-                      0
-                    ).toLocaleString()}
-
-                  </span>
+                 <span className="ml-1">
+                  ₱{formatMoney(String(data.permitFee || "0"))}
+                </span>
 
                 </div>
 
@@ -4030,37 +4077,23 @@ export default function ManualPermitPortal() {
                   QR CODE - MAYOR'S PERMIT
               ================================================== */}
 
-              {qrToken &&
-                verificationUrl && (
+           {qrToken &&
+  verificationUrl && (
+    <div className="absolute top-[0.3in] left-[0.3in] flex flex-col items-center bg-white p-2 z-30">
 
-                  <div className="absolute bottom-[0.65in] right-[0.65in] flex flex-col items-center bg-white p-2 z-30">
+      <QRCodeSVG
+        value={verificationUrl}
+        size={90}
+        level="H"
+        includeMargin
+      />
 
-                    <QRCodeSVG
+      <p className="text-[7px] font-black uppercase mt-1 text-center">
+        SCAN TO VERIFY
+      </p>
 
-                      value={
-                        verificationUrl
-                      }
-
-                      size={
-                        90
-                      }
-
-                      level="H"
-
-                      includeMargin
-
-                    />
-
-                    <p className="text-[7px] font-black uppercase mt-1 text-center">
-
-                      SCAN TO VERIFY
-
-                    </p>
-
-                  </div>
-
-                )}
-
+    </div>
+  )}
 
               {/* FOOTER SLOGAN */}
 
