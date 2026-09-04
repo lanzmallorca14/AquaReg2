@@ -775,86 +775,61 @@ const handleExportWPS = async () => {
       id: "wps-export",
     });
 
-    // ---------------------------------------------------------
+    // =========================================================
     // 1. WAIT FOR FONTS
-    // ---------------------------------------------------------
+    // =========================================================
     if ("fonts" in document) {
-      await document.fonts.ready;
+      try {
+        await document.fonts.ready;
+      } catch (fontError) {
+        console.warn("Font loading warning:", fontError);
+      }
     }
 
-    // ---------------------------------------------------------
-    // 2. WAIT FOR ALL IMAGES
-    // ---------------------------------------------------------
+    // =========================================================
+    // 2. WAIT FOR IMAGES
+    // =========================================================
     const images = Array.from(
       printElement.querySelectorAll("img")
     );
 
     await Promise.all(
       images.map((img) => {
-        if (img.complete) return Promise.resolve();
+        if (img.complete && img.naturalWidth > 0) {
+          return Promise.resolve();
+        }
 
         return new Promise<void>((resolve) => {
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
+          const done = () => resolve();
+
+          img.addEventListener("load", done, {
+            once: true,
+          });
+
+          img.addEventListener("error", done, {
+            once: true,
+          });
+
+          // Safety timeout
+          setTimeout(resolve, 3000);
         });
       })
     );
 
-    // Allow browser layout to settle.
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => resolve())
-      )
-    );
-
-    // ---------------------------------------------------------
-    // 3. GET THE ACTUAL RENDERED SIZE
-    // ---------------------------------------------------------
-    const rect = printElement.getBoundingClientRect();
-
-    const renderedWidth = Math.round(rect.width);
-    const renderedHeight = Math.round(rect.height);
-
-    if (!renderedWidth || !renderedHeight) {
-      throw new Error("Permit document has invalid dimensions.");
-    }
-
-    // ---------------------------------------------------------
-    // 4. CAPTURE EXACTLY WHAT IS CURRENTLY DISPLAYED
-    // ---------------------------------------------------------
-    const canvas = await html2canvas(printElement, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: false,
-      backgroundColor: "#ffffff",
-      logging: false,
-
-      width: renderedWidth,
-      height: renderedHeight,
-
-      windowWidth: renderedWidth,
-      windowHeight: renderedHeight,
-
-      scrollX: 0,
-      scrollY: 0,
-
-      onclone: (clonedDocument) => {
-        const clonedElement =
-          clonedDocument.getElementById("permit-document");
-
-        if (!clonedElement) return;
-
-        // IMPORTANT:
-        // Keep the exact dimensions of the displayed document.
-        clonedElement.style.transform = "none";
-        clonedElement.style.margin = "0";
-        clonedElement.style.boxSizing = "border-box";
-      },
+    // =========================================================
+    // 3. WAIT FOR BROWSER LAYOUT
+    // =========================================================
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(resolve, 150);
+        });
+      });
     });
 
-    // ---------------------------------------------------------
-    // 5. DETERMINE PAPER SIZE
-    // ---------------------------------------------------------
+    // =========================================================
+    // 4. DETERMINE EXACT PAPER SIZE
+    // =========================================================
     const isCertificate = isVesselType;
 
     const pageWidth = isCertificate
@@ -865,6 +840,123 @@ const handleExportWPS = async () => {
       ? 355.6
       : 297;
 
+    // =========================================================
+    // 5. CONVERT MM / INCH TO PX
+    // =========================================================
+    // 96 CSS pixels = 1 inch
+    const MM_TO_PX = 96 / 25.4;
+    const IN_TO_PX = 96;
+
+    const captureWidth = isCertificate
+      ? Math.round(215.9 * MM_TO_PX)
+      : Math.round(8.27 * IN_TO_PX);
+
+    const captureHeight = isCertificate
+      ? Math.round(355.6 * MM_TO_PX)
+      : Math.round(11.69 * IN_TO_PX);
+
+    // =========================================================
+    // 6. CAPTURE THE DOCUMENT
+    // =========================================================
+    const canvas = await html2canvas(printElement, {
+      scale: 2,
+
+      useCORS: true,
+      allowTaint: false,
+
+      backgroundColor: "#ffffff",
+
+      logging: false,
+
+      width: captureWidth,
+      height: captureHeight,
+
+      windowWidth: captureWidth,
+      windowHeight: captureHeight,
+
+      scrollX: 0,
+      scrollY: 0,
+
+      imageTimeout: 15000,
+
+      onclone: (clonedDocument) => {
+        const clonedElement =
+          clonedDocument.getElementById("permit-document");
+
+        if (!clonedElement) return;
+
+        // =====================================================
+        // FORCE EXACT DOCUMENT SIZE
+        // =====================================================
+        clonedElement.style.width = isCertificate
+          ? "215.9mm"
+          : "8.27in";
+
+        clonedElement.style.height = isCertificate
+          ? "355.6mm"
+          : "11.69in";
+
+        clonedElement.style.minWidth = isCertificate
+          ? "215.9mm"
+          : "8.27in";
+
+        clonedElement.style.minHeight = isCertificate
+          ? "355.6mm"
+          : "11.69in";
+
+        clonedElement.style.maxWidth = "none";
+        clonedElement.style.maxHeight = "none";
+
+        clonedElement.style.margin = "0";
+        clonedElement.style.transform = "none";
+
+        clonedElement.style.position = "relative";
+
+        clonedElement.style.boxSizing = "border-box";
+
+        clonedElement.style.overflow = "hidden";
+
+        clonedElement.style.backgroundColor = "#ffffff";
+
+        // =====================================================
+        // REMOVE RESPONSIVE BEHAVIOR
+        // =====================================================
+        clonedElement.classList.remove(
+          "md:w-80",
+          "md:p-12",
+          "md:flex-row",
+          "md:flex"
+        );
+
+        // =====================================================
+        // FORCE TEXT / COLORS TO RENDER
+        // =====================================================
+        const allElements =
+          clonedElement.querySelectorAll("*");
+
+      allElements.forEach((element) => {
+  const el = element as HTMLElement;
+
+  el.style.visibility = "visible";
+  el.style.printColorAdjust = "exact";
+});
+
+        // =====================================================
+        // FORCE IMAGES TO LOAD
+        // =====================================================
+        const clonedImages =
+          clonedElement.querySelectorAll("img");
+
+        clonedImages.forEach((img) => {
+          img.style.visibility = "visible";
+          img.style.display = "block";
+        });
+      },
+    });
+
+    // =========================================================
+    // 7. CREATE PDF
+    // =========================================================
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -872,31 +964,9 @@ const handleExportWPS = async () => {
       compress: true,
     });
 
-    // ---------------------------------------------------------
-    // 6. FIT IMAGE TO PAPER WITHOUT DISTORTION
-    // ---------------------------------------------------------
-    const canvasRatio = canvas.width / canvas.height;
-    const pageRatio = pageWidth / pageHeight;
-
-    let imageWidth: number;
-    let imageHeight: number;
-
-    if (canvasRatio > pageRatio) {
-      // Wider than page
-      imageWidth = pageWidth;
-      imageHeight = imageWidth / canvasRatio;
-    } else {
-      // Taller than page
-      imageHeight = pageHeight;
-      imageWidth = imageHeight * canvasRatio;
-    }
-
-    const x = (pageWidth - imageWidth) / 2;
-    const y = (pageHeight - imageHeight) / 2;
-
-    // ---------------------------------------------------------
-    // 7. ADD IMAGE
-    // ---------------------------------------------------------
+    // =========================================================
+    // 8. ALWAYS FIT TO FULL PAGE
+    // =========================================================
     const imageData = canvas.toDataURL(
       "image/jpeg",
       0.98
@@ -905,36 +975,44 @@ const handleExportWPS = async () => {
     pdf.addImage(
       imageData,
       "JPEG",
-      x,
-      y,
-      imageWidth,
-      imageHeight,
+      0,
+      0,
+      pageWidth,
+      pageHeight,
       undefined,
       "FAST"
     );
 
-    // ---------------------------------------------------------
-    // 8. FILE NAME
-    // ---------------------------------------------------------
+    // =========================================================
+    // 9. FILE NAME
+    // =========================================================
     const fileName = isCertificate
       ? `Certificate-${data.certificateNo || data.registrationId || "Permit"}.pdf`
       : `Mayors-Permit-${data.officialNo || data.registrationId || "Permit"}.pdf`;
 
     pdf.save(fileName);
 
-    toast.success("WPS/PDF exported successfully.", {
-      id: "wps-export",
-    });
+    toast.success(
+      "WPS/PDF exported successfully.",
+      {
+        id: "wps-export",
+      }
+    );
 
   } catch (error) {
-    console.error("WPS EXPORT ERROR:", error);
+    console.error(
+      "WPS EXPORT ERROR:",
+      error
+    );
 
-    toast.error("Failed to export permit.", {
-      id: "wps-export",
-    });
+    toast.error(
+      "Failed to export permit.",
+      {
+        id: "wps-export",
+      }
+    );
   }
 };
-
 
 const handleSavePermit = async () => {
   if (!vesselId) {
