@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect, type Dispatch, type SetStateAction, type ReactNode } from 'react';
-import type { SupabaseClient, AuthChangeEvent, Session } from '@supabase/supabase-js';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { SupabaseClient } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 // --- Interfaces ---
 
@@ -47,6 +48,7 @@ export interface Vessel {
   is_motorized: boolean;
   hull_length: number;
   hull_width: number;
+  unit_count: number;
   hull_depth: number;
   tonnage_gross: number;
   tonnage_net: number;
@@ -82,6 +84,8 @@ export interface Vessel {
   permit_fee: string;
   boat_builder_no: string;
   units_in_words: string;
+  number_of_units: string;
+  payao_numbers?: string;
 }
 
 export interface UserSession {
@@ -109,33 +113,31 @@ interface AquaRegContextType {
   logout: () => Promise<void>;
   resetPassword: (email: string, newPassword: string) => Promise<boolean>; 
   Vessels: Vessel[];
-  setCurrentUser: Dispatch<SetStateAction<UserSession | null>>;
+  setCurrentUser: React.Dispatch<React.SetStateAction<UserSession | null>>;
   addVessel: (vData: any) => Promise<Vessel | null>;
   updateVessel: (id: string, data: Partial<Vessel>) => Promise<boolean>;
   updateVesselStatus: (id: string, newStatus: Vessel['status']) => Promise<void>;
-  deleteVessel: (id: string) => Promise<boolean>; 
+  deleteVessel: (id: string) => Promise<void>;
   inspectors: Inspector[];
   requestRegistration: (data: any, userId: string, idFile?: File | Blob, signatureFile?: File | Blob | string) => Promise<boolean>; 
   updateInspectorStatus: (id: string, status: Inspector['status']) => Promise<void>;
   deleteInspector: (id: string) => Promise<void>;
   approveVessel: (id: string, adminOrInspectorName: string, remarks?: string) => Promise<boolean>;
   completeInspection: (id: string, orNumber: string, remarks?: string) => Promise<boolean>; // <-
-  removeVessel: (id: string) => Promise<boolean>; 
+  removeVessel: (id: string) => Promise<void>; 
   scheduleInspection: (id: string, inspectorIdNumber: string, dateStr: string) => Promise<any>;
   finalizeRegistry: (id: string, orNumber: string, date: string, remarks?: string) => Promise<boolean>;
   getExpirationStatus: (expiryDate: string | undefined) => ExpirationStatus;
   isDuplicateName: (name: string, currentId?: string) => Promise<boolean>;
   generatePermitNo: () => Promise<string>;
-
 }
-
 
 const AquaRegContext = createContext<AquaRegContextType | undefined>(undefined);
 
 export const AquaRegProvider = ({
   children, supabase
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
   supabase: SupabaseClient;
 }) => {
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
@@ -205,45 +207,26 @@ export const AquaRegProvider = ({
         if (personnelError) {
           console.error(personnelError);
         } else {
-         setInspectors(
-  (personnel ?? []).map((profile): Inspector => ({
-    id: profile.id,
-    idNumber: profile.id_number || "",
-    name: profile.name || "",
-    email: profile.email || "",
-    status: profile.profile_status || "pending",
-    position: profile.position || "Fishery Inspector",
-    barangay: profile.barangay || "",
-    age: Number(profile.age) || 0,
-    sex: profile.sex || "Male",
-    yearsInService: Number(profile.years_in_service) || 0,
-
-    // PHONE NUMBER
-    cellphone:
-      profile.cellphone ||
-      profile.contact_number ||
-      profile.cp_number ||
-      profile.phone ||
-      "",
-
-    contact_number: profile.contact_number || null,
-    phone: profile.phone || null,
-    cp_number: profile.cp_number || null,
-
-    createdAt: profile.created_at || "",
-
-    // MUNICIPAL ID IMAGE
-    municipalIdImage: profile.municipal_id_image || null,
-
-    role: profile.role || "inspector",
-
-    password_recovered:
-      profile.password_recovered ?? false,
-
-    password_changed_at:
-      profile.password_changed_at ?? null,
-  }))
-);
+          setInspectors(
+            (personnel ?? []).map((profile): Inspector => ({
+              id: profile.id,
+              idNumber: profile.id_number,
+              name: profile.name,
+              email: profile.email,
+              status: profile.profile_status,
+              position: profile.position,
+              barangay: profile.barangay,
+              age: profile.age,
+              sex: profile.sex,
+              yearsInService: profile.years_in_service,
+              cellphone: profile.cellphone,
+              createdAt: profile.created_at,
+              municipalIdImage: profile.municipal_id_image,
+              role: profile.role || 'inspector',
+              password_recovered: profile.password_recovered ?? false,
+              password_changed_at: profile.password_changed_at ?? null,
+            }))
+          );
 
           try {
             const { aquaOfflineDB } = await import("../../../offline/db");
@@ -268,45 +251,26 @@ export const AquaRegProvider = ({
           if (db.objectStoreNames.contains("personnel_profiles")) {
             const personnel = await db.getAll("personnel_profiles");
 
-           setInspectors(
-  (personnel ?? []).map((profile): Inspector => ({
-    id: profile.id,
-    idNumber: profile.id_number || "",
-    name: profile.name || "",
-    email: profile.email || "",
-    status: profile.profile_status || "pending",
-    position: profile.position || "Fishery Inspector",
-    barangay: profile.barangay || "",
-    age: Number(profile.age) || 0,
-    sex: profile.sex || "Male",
-    yearsInService: Number(profile.years_in_service) || 0,
-
-    // PHONE NUMBER
-    cellphone:
-      profile.cellphone ||
-      profile.contact_number ||
-      profile.cp_number ||
-      profile.phone ||
-      "",
-
-    contact_number: profile.contact_number || null,
-    phone: profile.phone || null,
-    cp_number: profile.cp_number || null,
-
-    createdAt: profile.created_at || "",
-
-    // MUNICIPAL ID IMAGE
-    municipalIdImage: profile.municipal_id_image || null,
-
-    role: profile.role || "inspector",
-
-    password_recovered:
-      profile.password_recovered ?? false,
-
-    password_changed_at:
-      profile.password_changed_at ?? null,
-  }))
-);
+            setInspectors(
+              personnel.map((profile: any): Inspector => ({
+                id: profile.id,
+                idNumber: profile.id_number,
+                name: profile.name,
+                email: profile.email,
+                status: profile.profile_status,
+                position: profile.position,
+                barangay: profile.barangay,
+                age: profile.age,
+                sex: profile.sex,
+                yearsInService: profile.years_in_service,
+                cellphone: profile.cellphone,
+                createdAt: profile.created_at,
+                municipalIdImage: profile.municipal_id_image,
+                role: profile.role || 'inspector',
+                password_recovered: profile.password_recovered ?? false,
+                password_changed_at: profile.password_changed_at ?? null,
+              }))
+            );
           }
         } catch (e) {
           console.warn("Offline DB read skipped:", e);
@@ -447,34 +411,23 @@ export const AquaRegProvider = ({
   }, [supabase]);
 
   // Helper function to upload files to private bucket
-const uploadFile = async (
-  bucket: string,
-  path: string,
-  fileObject: File | Blob
-): Promise<string | null> => {
+const uploadFile = async (bucket: string, path: string, fileObject: File | Blob): Promise<string | null> => {
   try {
+    const cleanBucketName = bucket.toLowerCase().replace(/[^a-z0-9-]/g, '');
+
     const { data, error } = await supabase.storage
-      .from(bucket)
+      .from(cleanBucketName)
       .upload(path, fileObject, {
         upsert: true,
-        contentType: fileObject.type || "image/png",
+        contentType: fileObject.type,
       });
 
-    if (error) {
-      console.error("Upload error:", error);
-      throw error;
-    }
-
-    const { data: urlData } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(data.path);
-
-    console.log("Uploaded image URL:", urlData.publicUrl);
-
-    return urlData.publicUrl;
+    if (error) throw error;
+    // Return only the private storage path (e.g., "userId/123456789.png")
+    return data.path; 
   } catch (error: any) {
-    console.error("File upload failed:", error.message);
-    return null;
+    console.error(`File upload failed for bucket ${bucket}:`, error.message);
+    throw error;
   }
 };
 
@@ -696,7 +649,11 @@ if (matchedProfile) {
         number_of_boats: vData.number_of_boats || "",
         boat_name: vData.boat_name || "",
         status: vData.status || "Pending",
-        created_at: vData.created_at || new Date().toISOString()
+        created_at: vData.created_at || new Date().toISOString(),
+        unit_count: Number(vData.unit_count) || 0,
+        number_of_units: vData.number_of_units || "1",
+        payao_numbers: vData.payao_numbers || null,
+
       };
 
       if (navigator.onLine) {
@@ -839,13 +796,9 @@ await db.add("syncQueue", {
     }
   };
 
- const deleteVessel = async (id: string) => {
-  // Optimistic UI update: Remove from React state immediately
-  setVessels((prev: any[]) =>
-    prev.filter((v: any) => String(v.id) !== String(id))
-  );
+  const deleteVessel = async (id: string) => {
+    setVessels(prev => prev.filter(v => v.id !== id));
 
-  try {
     if (navigator.onLine) {
       const { error } = await supabase.from('Vessels').delete().eq('id', id);
       if (error) throw error;
@@ -863,13 +816,7 @@ await db.add("syncQueue", {
         console.warn("Offline DB write skipped:", e);
       }
     }
-
-    return true;
-  } catch (error) {
-    console.error('deleteVessel error:', error);
-    throw error;
-  }
-};
+  };
 
   const approveVessel = async (id: string, name: string, remarks?: string): Promise<boolean> => {
     return await updateVessel(id, { status: 'Passed', assigned_inspector: name, remarks });
@@ -974,7 +921,7 @@ await db.add("syncQueue", {
     }
   };
 
-  const deleteInspector = async (id: string): Promise<void> => {
+  const deleteInspector = async (id: string) => {
     setInspectors(prev => prev.filter(ins => ins.id !== id));
 
     if (navigator.onLine) {
@@ -999,8 +946,8 @@ await db.add("syncQueue", {
   return (
     <AquaRegContext.Provider value={{ 
       supabase, currentUser, setCurrentUser, loading, authInitialized, login, logout, resetPassword, Vessels, 
-      addVessel, updateVessel, updateVesselStatus, removeVessel: deleteVessel, generatePermitNo,
-      inspectors, requestRegistration, updateInspectorStatus, deleteInspector, deleteVessel,
+      addVessel, updateVessel, updateVesselStatus, deleteVessel, removeVessel: deleteVessel, generatePermitNo,
+      inspectors, requestRegistration, updateInspectorStatus, deleteInspector, 
       approveVessel, scheduleInspection, finalizeRegistry, getExpirationStatus, isDuplicateName, completeInspection,
     }}>
       {children}

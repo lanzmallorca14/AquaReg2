@@ -10,7 +10,8 @@ import {
   Ship,
   Anchor,
   ShieldCheck,
-  ClipboardCheck
+  ClipboardCheck,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAquaData, useAquaAuth } from '../../components/context/AquaRegCONTEXT';
@@ -237,6 +238,132 @@ export default function InspectionCOI() {
     setCoiData(prev => ({ ...prev, [name]: value.toUpperCase() }));
   };
 
+  const handleDeletePermanently = async () => {
+    if (!selectedVessel) return;
+
+    const vesselName =
+      selectedVessel.vessel_name ||
+      selectedVessel.gear_type ||
+      "this vessel";
+
+    const confirmed = window.confirm(
+      `PERMANENT DELETE\n\nAre you sure you want to permanently delete "${vesselName}"?\n\n` +
+      `This will delete the Vessel record, COI record, and Permit Management record.\n\n` +
+      `THIS ACTION CANNOT BE UNDONE.`
+    );
+
+    if (!confirmed) return;
+
+    setIsSaving(true);
+
+    try {
+      const id = selectedVessel.id;
+
+      if (navigator.onLine) {
+        // Delete dependent records first, then the vessel.
+        const { error: coiError } = await supabase
+          .from("COI")
+          .delete()
+          .eq("vessel_id", id);
+
+        if (coiError) {
+          throw new Error(`Failed to delete COI record: ${coiError.message}`);
+        }
+
+        const { error: permitError } = await supabase
+          .from("permit_management")
+          .delete()
+          .eq("asset_id", id);
+
+        if (permitError) {
+          throw new Error(`Failed to delete permit record: ${permitError.message}`);
+        }
+
+        const { error: vesselError } = await supabase
+          .from("Vessels")
+          .delete()
+          .eq("id", id);
+
+        if (vesselError) {
+          throw new Error(`Failed to delete vessel: ${vesselError.message}`);
+        }
+
+        setLocalVessels(prev =>
+          prev.filter(v => String(v.id) !== String(id))
+        );
+        setSelectedVessel(null);
+
+        toast.success(
+          "Vessel, COI, and permit records were permanently deleted."
+        );
+      } else {
+        const db = await aquaOfflineDB;
+
+        // Delete local records immediately.
+        const coiRecords = await db.getAll("COI");
+        for (const coi of coiRecords) {
+          if (String(coi.vessel_id) === String(id)) {
+            await db.delete("COI", coi.id);
+          }
+        }
+
+        const permits = await db.getAll("permit_management");
+        for (const permit of permits) {
+          if (String(permit.asset_id) === String(id)) {
+            await db.delete("permit_management", permit.id);
+          }
+        }
+
+        await db.delete("Vessels", id);
+
+        // Queue deletes for the next synchronization.
+        await db.add("syncQueue", {
+          action: "DELETE",
+          table: "COI",
+          data: { vessel_id: id },
+          created_at: new Date().toISOString()
+        });
+
+        await db.add("syncQueue", {
+          action: "DELETE",
+          table: "permit_management",
+          data: { asset_id: id },
+          created_at: new Date().toISOString()
+        });
+
+        await db.add("syncQueue", {
+          action: "DELETE",
+          table: "Vessels",
+          data: { id },
+          created_at: new Date().toISOString()
+        });
+
+        setLocalVessels(prev =>
+          prev.filter(v => String(v.id) !== String(id))
+        );
+        setSelectedVessel(null);
+
+        toast.success(
+          "Record deleted locally and queued for permanent database deletion."
+        );
+      }
+
+      setTimeout(() => {
+        navigate("/inspector/inspection");
+      }, 1000);
+    } catch (error: any) {
+      console.error("========== PERMANENT DELETE ERROR ==========");
+      console.error(error);
+      console.error("============================================");
+
+      toast.error(
+        error?.message || "Failed to permanently delete the record."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveRecord = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedVessel) return;
@@ -449,6 +576,21 @@ export default function InspectionCOI() {
             <ArrowLeft size={16} className="mr-2" /> Cancel Audit
           </Button>
           <div className="flex gap-3">
+            <Button
+              type="button"
+              onClick={handleDeletePermanently}
+              disabled={isSaving}
+              variant="outline"
+              className="border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white font-black text-[10px] uppercase tracking-widest rounded-xl px-6 h-12 transition-all"
+            >
+              {isSaving ? (
+                <Loader2 size={16} className="animate-spin mr-2" />
+              ) : (
+                <Trash2 size={16} className="mr-2" />
+              )}
+              Delete Permanently
+            </Button>
+
             <Button 
               onClick={handleSaveRecord} 
               disabled={isSaving || selectedVessel?.status === "Passed"} 
@@ -471,7 +613,7 @@ export default function InspectionCOI() {
                 </>
               )}
             </Button>
-            <Button variant="outline" onClick={() => window.print()} className="font-black text-[10px] uppercase tracking-widest border-2 border-slate-900 rounded-xl px-6 h-12">
+            <Button variant="outline" onClick={() => window.print()} disabled={isSaving} className="font-black text-[10px] uppercase tracking-widest border-2 border-slate-900 rounded-xl px-6 h-12">
               <Printer size={16} className="mr-2" /> Print
             </Button>
           </div>

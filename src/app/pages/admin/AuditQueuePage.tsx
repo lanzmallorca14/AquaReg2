@@ -32,10 +32,7 @@ export default function AuditQueuePage() {
         throw new Error('Delete function is not available in AquaRegCONTEXT.');
       }
 
-      const success = await deleteVessel(vessel.id);
-      if (!success) {
-        throw new Error('Failed to delete audit application.');
-      }
+      await deleteVessel(vessel.id);
 
       setSelectedVessel(null);
 
@@ -131,7 +128,18 @@ export default function AuditQueuePage() {
                         </div>
                         <div>
                           <div className="font-black italic text-slate-900 uppercase tracking-tight">
-                            {v.vessel_name || v.gear_type || 'UNNAMED ASSET'}
+                           {normalizedCategory === 'payao' || normalizedCategory === 'balsa'
+                            ? (
+                                v.vessel_name ||
+                                v.parent_vessel_name ||
+                                v.boat_owner_vessel_name ||
+                                'UNNAMED ASSET'
+                              )
+                            : (
+                                v.vessel_name ||
+                                v.gear_type ||
+                                'UNNAMED ASSET'
+                              )}
                           </div>
                           <div className="text-[9px] font-mono font-bold text-slate-400 uppercase">ID: {v.id}</div>
                         </div>
@@ -142,8 +150,12 @@ export default function AuditQueuePage() {
                     </td>
                     <td className="px-8 py-6 text-center">
                       <Badge className="bg-blue-100 text-blue-600 border-none rounded-md text-[9px] font-black uppercase px-3">
-                        {(v.asset_category || v.type || 'GENERAL').toUpperCase()}
-                      </Badge>
+  {(['payao', 'balsa'].includes(
+    (v.asset_category || v.type || '').toLowerCase()
+  ))
+    ? 'PAYAO/BALSA'
+    : (v.asset_category || v.type || 'GENERAL').toUpperCase()}
+</Badge>
                     </td>
                    <td className="px-8 py-6">
   <div className="flex items-center justify-end gap-2">
@@ -214,8 +226,38 @@ function AuditDetailPopup({ vessel, onClose }: { vessel: any, onClose: () => voi
   const [rejectionNotes, setRejectionNotes] = useState<string>("");
   const [isSubmittingRejection, setIsSubmittingRejection] = useState<boolean>(false);
 
-  const rawCategory = (vessel.asset_category || vessel.type || '').toLowerCase();
-  const isGearCategory = ['payao', 'balsa', 'pangulong', 'gears'].includes(rawCategory);
+  const rawCategory = (
+  vessel.asset_category ||
+  vessel.type ||
+  ''
+).toLowerCase();
+
+const isPangulong = rawCategory === 'pangulong';
+
+const isFishingGear = rawCategory === 'gears';
+
+const isPayao = ['payao', 'balsa'].includes(rawCategory);
+
+const isMotorizedVessel =
+  rawCategory === 'vessel' &&
+  (
+    vessel.vesselType === 'motorized' ||
+    vessel.is_motorized === true
+  );
+
+const isNonMotorizedVessel =
+  rawCategory === 'vessel' &&
+  (
+    vessel.vesselType === 'non-motorized' ||
+    vessel.is_motorized === false
+  );
+
+const isGearCategory = [
+  'payao',
+  'balsa',
+  'pangulong',
+  'gears'
+].includes(rawCategory);
 
   // Document requirement setup:
   const activeDocKeys = useMemo(() => {
@@ -364,39 +406,57 @@ function AuditDetailPopup({ vessel, onClose }: { vessel: any, onClose: () => voi
         </div>
         
         <div className="grid grid-cols-2 gap-y-8 mb-8">
-          <DetailItem 
-            label="Category" 
-            value={rawCategory === 'gears' ? 'FISHING GEAR' : rawCategory.toUpperCase() || '---'} 
-          />
+         <DetailItem
+  label="Category"
+  value={
+    isPayao
+      ? 'PAYAO/BALSA'
+      : rawCategory === 'gears'
+        ? 'FISHING GEAR'
+        : rawCategory.toUpperCase() || '---'
+  }
+/>
           
-          {!isGearCategory ? (
-            <DetailItem 
-              label="Propulsion" 
-              value={vessel.vesselType?.toUpperCase() || (vessel.is_motorized ? 'MOTORIZED' : 'NON-MOTORIZED')} 
-              icon={<Ship size={14} className="text-blue-600" />} 
-            />
-          ) : (
-            <DetailItem 
-              label="Method/Type" 
-              value={vessel.gear_type || rawCategory.toUpperCase() || 'STATIONARY'} 
-              icon={<LifeBuoy size={14} className="text-orange-500" />} 
-            />
-          )}
+        {rawCategory === 'vessel' ? (
+  <DetailItem
+    label="Propulsion"
+    value={
+      isMotorizedVessel
+        ? 'MOTORIZED'
+        : isNonMotorizedVessel
+          ? 'NON-MOTORIZED'
+          : vessel.vesselType?.toUpperCase() ||
+            (vessel.is_motorized ? 'MOTORIZED' : 'NON-MOTORIZED')
+    }
+    icon={<Ship size={14} className="text-blue-600" />}
+  />
+) : rawCategory === 'payao' || rawCategory === 'balsa' ? null : (
+  <DetailItem
+    label="Method/Type"
+    value={vessel.gear_type || rawCategory.toUpperCase() || 'STATIONARY'}
+    icon={<LifeBuoy size={14} className="text-orange-500" />}
+  />
+)}
         </div>
 
-        {!['payao', 'balsa'].includes(rawCategory) ? (
-          <div className="pt-8 border-t border-slate-100 grid grid-cols-3 gap-2">
-            <DetailItem label="Length (M)" value={vessel.hull_length || '0.00'} />
-            <DetailItem label="Width (M)" value={vessel.hull_width || '0.00'} />
-            <DetailItem label="Depth (M)" value={vessel.hull_depth || '0.00'} />
-          </div>
-        ) : (
-          <div className="mt-4 p-4 bg-amber-50 rounded-2xl border border-dashed border-amber-200 text-center">
-             <p className="text-[9px] font-black text-amber-700 uppercase leading-tight italic">
-                Stationary Asset: Verify GPS and Anchoring location.
-             </p>
-          </div>
-        )}
+      {!['payao', 'balsa', 'gears', 'pangulong'].includes(rawCategory) && (
+  <div className="pt-8 border-t border-slate-100 grid grid-cols-3 gap-2">
+    <DetailItem
+      label="Length (M)"
+      value={vessel.hull_length || '0.00'}
+    />
+
+    <DetailItem
+      label="Width (M)"
+      value={vessel.hull_width || '0.00'}
+    />
+
+    <DetailItem
+      label="Depth (M)"
+      value={vessel.hull_depth || '0.00'}
+    />
+  </div>
+)}
       </div>
     );
   };
@@ -413,15 +473,19 @@ function AuditDetailPopup({ vessel, onClose }: { vessel: any, onClose: () => voi
               <Calculator size={32} />
             </div>
             <div>
-              <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">
-                {vessel.vessel_name || vessel.gear_type || 'Audit Review'}
-              </h2>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge className="bg-blue-500 text-white border-none text-[9px] font-black uppercase tracking-widest">
-                  {(vessel.asset_category || vessel.type)?.toUpperCase()} Audit
-                </Badge>
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">ID: {vessel.id}</span>
-              </div>
+           <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">
+            {vessel.vessel_name || vessel.gear_type || 'Audit Review'}
+          </h2>
+
+          <div className="mt-2">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              ID: {vessel.id}
+            </div>
+
+            <Badge className="mt-2 bg-blue-500 text-white border-none text-[9px] font-black uppercase tracking-widest">
+              {(vessel.asset_category || vessel.type)?.toUpperCase()} Audit
+            </Badge>
+          </div>
             </div>
           </div>
           
@@ -471,6 +535,8 @@ function AuditDetailPopup({ vessel, onClose }: { vessel: any, onClose: () => voi
                       icon={<MapPin size={14} />}
                     />
 
+                   {!isPangulong && !isPayao && !isFishingGear && (
+                  <>
                     <DetailItem
                       label="Place of Built"
                       value={vessel.place_of_built || 'N/A'}
@@ -480,12 +546,54 @@ function AuditDetailPopup({ vessel, onClose }: { vessel: any, onClose: () => voi
                       label="Year Built"
                       value={vessel.year_built || 'N/A'}
                     />
+                  </>
+                )}
                   </div>
                 </div>
 
+
+          {/* CATEGORY-SPECIFIC DETAILS */}
+{(isPangulong || isFishingGear || isPayao) && (
+  <div className="bg-white p-8 rounded-[2.5rem] shadow-sm">
+    <div className="flex items-center gap-2 mb-6">
+      <LifeBuoy className="text-emerald-500" size={18} />
+
+      <h4 className="text-[10px] font-black uppercase text-emerald-600 tracking-widest italic">
+        Asset Details
+      </h4>
+    </div>
+
+    <div>
+      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+        Units in Words
+      </p>
+
+      <div className="p-4 mt-1 rounded-xl text-sm font-black uppercase text-black whitespace-pre-line">
+        {isPayao
+          ? (
+              <>
+                {vessel.units_in_words || 'ENTER UNIT COUNT'}
+                {(vessel.boat_name || vessel.payao_numbers) && (
+                  <>
+                    {'\n'}
+                    {vessel.boat_name || vessel.payao_numbers}
+                  </>
+                )}
+              </>
+            )
+          : vessel.units_in_words ||
+            (
+              isPangulong
+                ? 'ONE (1) UNIT RING NET (PANGULONG)'
+                : `ONE (1) UNIT ${vessel.gear_type || 'JIGGING'}`
+            )}
+      </div>
+    </div>
+  </div>
+)}
                 {renderTechnicalSpecs()}
 
-                {!isGearCategory && (
+              {isMotorizedVessel && (
                   <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
                     <Anchor className="absolute -right-6 -bottom-6 text-white/5 rotate-12" size={160} />
                     <div className="relative z-10">

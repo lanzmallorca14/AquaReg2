@@ -118,33 +118,9 @@ const numberToWords = (num: number): string => {
   return num.toString();
 };
 
-const formatUnits = (value: string | number | null | undefined) => {
-  const normalized = value == null ? "" : String(value);
 
-  // If the user deletes everything, clear the field completely
-  if (normalized.trim() === "") {
-    return "";
-  }
 
-  // Extract digits only to safely parse values typed in inputs
-  const digitsOnly = normalized.replace(/\D/g, "");
-
-  // If backspacing removes all digits, clear the input
-  if (!digitsOnly) {
-    return "";
-  }
-
-  const number = Number(digitsOnly);
-
-  if (!Number.isFinite(number) || number <= 0) {
-    return "";
-  }
-
-  // Ensure integer value passed into numberToWords to prevent array index bugs
-  const word = numberToWords(Math.floor(number));
-
-  return `${word} (${number}) ${number === 1 ? "UNIT" : "UNITS"} OF`;
-};
+  
 
 const formatMoney = (value:string) => {
   const number = Number(value.replace(/,/g, ""));
@@ -538,17 +514,23 @@ useEffect(() => {
       ""
     ),
 
-    vesselName:
-      detectedType === "FISHING GEAR"
-        ? String(
-            vesselRecord.gear_type ||
-            vesselRecord.vessel_name ||
-            "FISHING GEAR"
-          ).toUpperCase()
-        : String(
-            vesselRecord.vessel_name ||
-            "UNNAMED"
-          ).toUpperCase(),
+   vesselName:
+  detectedType === "PAYAO/BALSA"
+    ? String(
+        vesselRecord.payao_vessel_name ||
+        vesselRecord.vessel_name ||
+        ""
+      ).toUpperCase()
+    : detectedType === "FISHING GEAR"
+      ? String(
+          vesselRecord.gear_type ||
+          vesselRecord.vessel_name ||
+          "FISHING GEAR"
+        ).toUpperCase()
+      : String(
+          vesselRecord.vessel_name ||
+          "UNNAMED"
+        ).toUpperCase(),
 
     ownerName: String(
       vesselRecord.owner_name ||
@@ -589,10 +571,11 @@ useEffect(() => {
     placeOfBuilt: placeBuilt.toUpperCase(),
 
     boatName: String(
-      vesselRecord.boat_name ||
-      vesselRecord.vessel_name ||
-      "N/A"
-    ).toUpperCase(),
+  vesselRecord.payao_numbers ||
+  vesselRecord.boat_name ||
+  permit?.boat_name ||
+  ""
+).toUpperCase(),
 
     unitsInWords: String(
       vesselRecord.units_in_words ||
@@ -609,8 +592,10 @@ useEffect(() => {
     ),
 
     numberOfBoats: String(
-      vesselRecord.number_of_boats || "0"
-    ),
+  vesselRecord.number_of_boats || 
+  permit?.number_of_boats ||
+  ""
+),
 
     depth: String(
       vesselRecord.hull_depth || "0"
@@ -758,9 +743,11 @@ const handleFinishEdit = async () => {
       boat_name: data.boatName,
       number_of_boats: data.numberOfBoats,
       units_in_words: data.unitsInWords,
+
       permit_fee: String(
         Number(data.permitFee?.replace(/,/g, '') || 0)
       ),
+
       gear_type: data.gearCategory,
     });
 
@@ -950,83 +937,154 @@ const handleExportWPS = async () => {
 
 
 const handleSavePermit = async () => {
-    if (!vesselId) {
-      toast.error("No vessel selected");
-      return;
-    }
+  if (!vesselId) {
+    toast.error("No vessel selected");
+    return;
+  }
 
-    try {
-      const category = subType === "MOTORIZED" || subType === "NON-MOTORIZED" ? "VESSEL" : subType;
-      
-      // Check if a permit record already exists for this asset to prevent duplicates
-      const { data: existingPermits, error: fetchError } = await supabase
+  try {
+    const category =
+      subType === "MOTORIZED" ||
+      subType === "NON-MOTORIZED"
+        ? "VESSEL"
+        : subType;
+
+    // Check if permit already exists
+    const { data: existingPermits, error: fetchError } =
+      await supabase
         .from("permit_management")
         .select("id, certificate_no")
         .eq("asset_id", vesselId);
 
-      if (fetchError) throw fetchError;
+    if (fetchError) throw fetchError;
 
-      let certificateNo;
-      let permitId;
+    let certificateNo: string;
+    let permitId: string;
 
-      if (existingPermits && existingPermits.length > 0) {
-        // Reuse existing permit ID and certificate number to avoid duplicates
-        permitId = existingPermits[0].id;
-        certificateNo = existingPermits[0].certificate_no || await generateCertificateNo();
-      } else {
-        certificateNo = await generateCertificateNo();
-        const { data: generatedPermitId } = await supabase.rpc("generate_romblon_permit_id");
-        permitId = generatedPermitId;
-      }
+    if (existingPermits && existingPermits.length > 0) {
+      permitId = existingPermits[0].id;
 
-      const officialNo = String(autoVessel?.registration_no || autoVessel?.id);
-      const { data: permitNo } = await supabase.rpc("generate_permit_number", { asset_type: category });
+      certificateNo =
+        existingPermits[0].certificate_no ||
+        await generateCertificateNo();
+    } else {
+      certificateNo = await generateCertificateNo();
 
-      // Upsert to ensure only one unique row per permit ID / asset ID exists
-      const { error } = await supabase
-        .from("permit_management")
-        .upsert({
-          id: permitId,
-          asset_id: vesselId,
-          certificate_no: certificateNo,
-          asset_category: category,
-          permit_no: permitNo || certificateNo,
-          official_no: officialNo,
-          vessel_name: data.vesselName,
-          owner_name: data.ownerName,
-          or_number: data.orNumber,
-          engine_Make: data.engineMake,
-          horsePower: data.horsePower,
-          serialNumber: data.serialNumber,
-          year_built: data.yearBuilt,
-          place_built: data.placeOfBuilt,
-          boat_builder_no: data.boat_builder_no,
-          permit_fee: Number((data.permitFee || "0").replace(/,/g, "")),
-          units_in_words: data.unitsInWords,
-          expiration_date: "2026-12-31",
-        }, { onConflict: 'id' });
+      const { data: generatedPermitId, error: rpcError } =
+        await supabase.rpc("generate_romblon_permit_id");
 
-      if (error) throw error;
+      if (rpcError) throw rpcError;
 
-      await updateVessel(vesselId, {
-        status: "REGISTERED",
-        or_number: data.orNumber,
-        official_no: officialNo,
-        certificate_no: certificateNo,
+      permitId = generatedPermitId;
+    }
+
+    const officialNo = String(
+      autoVessel?.registration_no ||
+      autoVessel?.id ||
+      ""
+    );
+
+    const { data: permitNo, error: permitNoError } =
+      await supabase.rpc("generate_permit_number", {
+        asset_type: category
       });
 
-      setData(prev => ({
-        ...prev,
-        certificateNo,
-        officialNo,
-      }));
+    if (permitNoError) throw permitNoError;
 
-      toast.success("Permit Saved Successfully");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to save permit");
-    }
-  };
+    const permitPayload = {
+      id: permitId,
+      asset_id: vesselId,
+
+      certificate_no: certificateNo,
+
+      asset_category: category,
+
+      permit_no:
+        permitNo ||
+        certificateNo,
+
+      official_no: officialNo,
+
+      vessel_name: data.vesselName,
+
+      owner_name: data.ownerName,
+
+      or_number: data.orNumber,
+
+      engine_Make: data.engineMake,
+
+      horsePower: data.horsePower,
+
+      serialNumber: data.serialNumber,
+
+      year_built: data.yearBuilt,
+
+      place_built: data.placeOfBuilt,
+
+      boat_builder_no: data.boat_builder_no,
+
+      permit_fee: Number(
+        (data.permitFee || "0").replace(/,/g, "")
+      ),
+
+      // SOURCE OF TRUTH FROM NEW REGISTRATION
+      units_in_words:
+        data.unitsInWords || null,
+
+      number_of_boats:
+        data.numberOfBoats || null,
+
+      expiration_date: "2026-12-31",
+    };
+
+    const { error } = await supabase
+      .from("permit_management")
+      .upsert(
+        permitPayload,
+        {
+          onConflict: "id"
+        }
+      );
+
+    if (error) throw error;
+
+    await updateVessel(vesselId, {
+      status: "REGISTERED",
+
+      or_number:
+        data.orNumber,
+
+      official_no:
+        officialNo,
+
+      certificate_no:
+        certificateNo,
+    });
+
+    setData(prev => ({
+      ...prev,
+
+      certificateNo,
+
+      officialNo,
+    }));
+
+    toast.success(
+      "Permit Saved Successfully"
+    );
+
+  } catch (err) {
+
+    console.error(
+      "SAVE PERMIT ERROR:",
+      err
+    );
+
+    toast.error(
+      "Failed to save permit"
+    );
+  }
+};
 
 
   const isVesselType = subType === 'MOTORIZED' || subType === 'NON-MOTORIZED';
@@ -1246,33 +1304,15 @@ return (
     </div>
 
 
- {subType === "FISHING GEAR" && (
-  <div className="space-y-3 border-t pt-4">
-    <Label className="text-[9px] font-black uppercase">
-      Units (In Words)
-    </Label>
-
-    <Input
-      type="text"
-      name="unitsInWords"
-      value={data.unitsInWords || ""}
-      onChange={(e) => {
-        const val = e.target.value;
-        const formatted = typeof formatUnits === "function" ? formatUnits(val) : val;
-
-        setData((prev) => ({
-          ...prev,
-          unitsInWords: formatted,
-        }));
-      }}
-      placeholder="e.g., 15 (Fifteen)"
-      className="h-10 font-bold bg-slate-50 border-slate-200"
-    />
-  </div>
-)}
+ 
 
 
-{(subType === "FISHING GEAR" || subType === "PAYAO/BALSA") && (
+{/* PERMIT FEE ONLY */}
+{(
+  subType === "FISHING GEAR" ||
+  subType === "PANGULONG" ||
+  subType === "PAYAO/BALSA"
+) && (
   <div className="space-y-3 border-t pt-4">
 
     <Label className="text-[9px] font-black uppercase">
@@ -1294,30 +1334,6 @@ return (
   </div>
 )}
 
-{/* PANGULONG / RING NET COUNT */}
-{subType === "PANGULONG" && (
-  <div className="space-y-3 border-t pt-4">
-
-    <Label className="text-[9px] font-black uppercase">
-      Number of Ring Nets
-    </Label>
-
-    <Input
-      name="numberOfBoats"
-      type="number"
-      min="1"
-      value={data.numberOfBoats || ""}
-      onChange={handleChange}
-      placeholder="1"
-      className="h-10 font-bold bg-slate-50 border-slate-200"
-    />
-
-    <p className="text-[9px] text-slate-400 font-bold uppercase">
-      Enter the number of Ring Nets (Pangulong).
-    </p>
-
-  </div>
-)}
 
 
 
@@ -1336,51 +1352,8 @@ return (
       />
 
     </div>
-   {subType === "PAYAO/BALSA" && (
-  <div className="space-y-3 border-t pt-4">
-
-    <Label className="text-[9px] font-black uppercase">
-      Payao / Balsa Name
-    </Label>
-
-    <Input
-      name="vesselName"
-      value={data.vesselName}
-      disabled
-      className="bg-slate-100 font-bold"
-    />
-
-    <Label className="text-[9px] font-black uppercase">
-      Number of Boats
-    </Label>
-
-    <Input
-      name="numberOfBoats"
-      type="number"
-      value={data.numberOfBoats}
-      onChange={handleChange}
-      placeholder="5"
-      className="h-10 font-bold bg-slate-50 border-slate-200"
-    />
-
-    <Label className="text-[9px] font-black uppercase">
-      Boat Name / Boat Numbers
-    </Label>
-
-    <Input
-      name="boatName"
-      value={data.boatName}
-      onChange={handleChange}
-      placeholder="Example: #107, #108, #109, #110"
-      className="h-10 font-bold bg-slate-50 border-slate-200"
-    />
-
-    <p className="text-[9px] text-slate-400 font-bold uppercase">
-      These details can be edited only in Configuration Mode.
-    </p>
-
-  </div>
-)}
+   
+   
 
 
     {/* FINISH */}
@@ -1649,10 +1622,12 @@ return (
     <p className="text-lg font-bold italic underline underline-offset-4 tracking-wide">To Whom It May Concern:</p>
     
     <div className="pt-6">
-      <p className="text-md uppercase font-bold text-slate-500 tracking-widest leading-none">This permit is hereby granted to</p>
-      <p className="text-4xl font-black uppercase mt-4 border-b-[3px] border-black inline-block px-12 italic leading-tight">
-        {data.ownerName || 'UNKNOWN'}
-      </p>
+      <p className="text-md uppercase font-bold text-slate-500 tracking-widest leading-none">
+  This permit is hereby granted to
+</p>
+<p className="text-4xl font-black uppercase mt-4 border-b-[3px] border-black inline-block pb-1 whitespace-nowrap italic leading-tight text-center">
+  {(data.ownerName || 'UNKNOWN').replace(/\s+/g, ' ').trim()}
+</p>
     </div>
 
     <div className="space-y-4">
@@ -1662,51 +1637,65 @@ Fishing gear/s specified herein:
       </p>
 
       <div className="py-2">
-      {/* ASSET NAME + UNITS DISPLAY */}
-{subType === "PAYAO/BALSA" ? (
-  <div className="text-center">
-    <p className="text-3xl font-black uppercase italic text-black">
-      {data.numberOfBoats && Number(data.numberOfBoats) > 0
-        ? `${formatUnits(data.numberOfBoats)} PAYAO/BALSA`
-        : "PAYAO/BALSA"}
-    </p>
+        {/* ASSET NAME + UNITS DISPLAY */}
 
-    {data.boatName && (
-      <p className="mt-5 text-xl font-black uppercase italic whitespace-nowrap">
-        NAME: {data.boatName}
+{subType === "PAYAO/BALSA" ? (
+
+<div className="text-center">
+
+    {/* UNITS FROM NEW REGISTRATION */}
+    {data.unitsInWords && (
+      <p className="text-3xl font-black uppercase italic text-black whitespace-nowrap">
+        {data.unitsInWords}
       </p>
     )}
+
+    {/* PAYAO / BALSA NAME + ACTUAL NUMBERS ON ONE LINE */}
+    {(data.vesselName || data.boatName) && (
+      <p className="mt-5 text-3xl font-black uppercase italic text-black whitespace-nowrap">
+        NAME: {data.vesselName || ""}
+        {data.boatName && ` ${data.boatName}`}
+      </p>
+    )}
+
   </div>
 
 ) : subType === "PANGULONG" ? (
-  <div className="flex justify-center items-center gap-3 flex-wrap">
-    <span className="text-3xl font-black italic uppercase text-black">
-      {formatUnits(data.numberOfBoats || "1")}
-    </span>
 
-    <p className="text-3xl font-black uppercase italic text-black">
-      RING NET (PANGULONG)
-    </p>
+  <div className="text-center">
+
+    {/* EXACT VALUE FROM NEW REGISTRATION */}
+    {data.unitsInWords && (
+      <p className="text-3xl font-black uppercase italic text-black whitespace-nowrap">
+  {data.unitsInWords}
+</p>
+    )}
+
   </div>
 
 ) : subType === "FISHING GEAR" ? (
-  <div className="flex justify-center items-center gap-3 flex-wrap">
-    <span className="text-3xl font-black italic uppercase">
-      {data.unitsInWords || (data.units ? `${data.units} UNITS` : '')}
-    </span>
 
-    <p className="text-3xl font-black uppercase italic text-black">
-      {data.gearCategory || "FISHING GEAR"}
+  <div className="text-center">
+
+    {/* EXACT VALUE FROM REGISTRATION */}
+    <p className="text-3xl font-black italic uppercase text-black">
+      {data.unitsInWords || data.gearCategory || "FISHING GEAR"}
     </p>
+
   </div>
 
 ) : (
+
   <div className="flex justify-center items-center gap-3 flex-wrap">
+
     <p className="text-3xl font-black uppercase underline decoration-[3px] underline-offset-[12px] italic text-blue-900">
       {data.vesselName || "UNNAMED"}
     </p>
+
   </div>
+
 )}
+    
 
         {/* ISSUANCE DATE */}
         <p className="text-md pt-10 italic">
@@ -1760,25 +1749,49 @@ Fishing gear/s specified herein:
 </div>
 </div>
   {/* FOOTER / PAYMENT INFO */}
-  <div className="absolute bottom-[0.8in] left-[0.8in] flex items-end gap-12 text-xs font-black uppercase font-sans">
-    <div className="space-y-1">
-      <p className="flex justify-between w-48 border-b border-slate-100 pb-1">
-        <span>PERMIT FEE:</span> <span className="text-blue-600">Php {data.permitFee || 'N/A'}</span>
-      </p>
-      <p className="flex justify-between w-48 border-b border-slate-100 pb-1">
-        <span>O.R. NO.</span> <span className="text-blue-600">{data.orNumber || 'N/A'}</span>
-      </p>
-      <p className="flex justify-between w-48">
-        <span>DATE</span> <span>{data.paymentDate || 'N/A'}</span>
-      </p>
-    </div>
-    <div className="pb-1 ml-50">
-      <p className="text-[10px] text-red-700 font-black">
-        EXPIRES: {expirationDate || ''}
-      </p>
-    </div>
+{/* METADATA GRID - MOVED DOWNWARD WITH mt-10 */}
+{/* METADATA GRID - CONDITIONALLY POSITIONED */}
+<div
+  className={`grid grid-cols-2 gap-x-2 gap-y-1 text-xs -ml-10 ${
+    subType === "FISHING GEAR" || subType === "PANGULONG"
+      ? "mt-24" // Moved downward for Fishing Gear and Pangulong
+      : "mt-10" // Retained position for Payao, Balsa, etc.
+  }`}
+>
+  {/* PERMIT FEE — LEFT */}
+  <div>
+    <span className="font-bold">PERMIT FEE:</span>
+    <span className="ml-1">
+      ₱{Number(data.permitFee || 0).toLocaleString()}
+    </span>
   </div>
-  {/* FOOTER SLOGAN */}
+
+  {/* DATE — FARTHER RIGHT + FIT */}
+  <div className="ml-48 whitespace-nowrap">
+    <span className="font-bold">DATE:</span>
+    <span className="ml-1 text-[9px]">
+      {data.issuedFullDate}
+    </span>
+  </div>
+
+  {/* O.R. NO. — LEFT */}
+  <div>
+    <span className="font-bold">O.R. NO.:</span>
+    <span className="ml-1">
+      {data.orNumber}
+    </span>
+  </div>
+
+  {/* EXPIRY DATE — FARTHER RIGHT + FIT */}
+  <div className="ml-48 whitespace-nowrap">
+    <span className="font-bold">EXPIRY DATE:</span>
+    <span className="ml-1 text-[9px]">
+      DECEMBER 31, {new Date().getFullYear()}
+    </span>
+  </div>
+</div>
+
+{/* FOOTER SLOGAN */}
 <div className="absolute bottom-[0.25in] left-0 right-0 text-center">
   <p className="text-[10px] font-black uppercase tracking-wide font-sans">
     ***“KATAHUM NG ROMBLON, IPAKADAKO NATON”***
