@@ -287,6 +287,15 @@ export default function ManualPermitPortal() {
   const [tempOrNumber, setTempOrNumber] =
     useState("");
 
+  /* ============================================================
+     WHETHER THE OR FIELD IN THE PAYMENT AUTH MODAL IS LOCKED
+     (Vessel assets pull their OR Number from an already-passed
+     COI record, so it's shown but not editable.)
+  ============================================================ */
+
+  const [isOrLocked, setIsOrLocked] =
+    useState(false);
+
   const [searchQuery, setSearchQuery] =
     useState("");
 
@@ -1104,9 +1113,18 @@ vesselName:
       );
     };
 
+  void isCOIValidated;
+
 
   /* ============================================================
      OPEN PERMIT MODAL
+
+     EVERY asset category — vessel or not, with or without a
+     passed COI — now goes straight to the same Payment Auth
+     modal, and the OR Number is always typed in manually.
+     Nothing is pre-filled, locked, or gated by the COI record
+     anymore. isCOIValidated() is kept in the file (retained,
+     per request) but is no longer called here.
   ============================================================ */
 
   const handleOpenModal =
@@ -1123,72 +1141,7 @@ vesselName:
       if (!selected) return;
 
 
-      const assetCat =
-        String(
-          selected.asset_category ||
-          selected.type ||
-          ''
-        ).toUpperCase();
-
-
-      const isVessel =
-        assetCat.includes(
-          "VESSEL"
-        ) ||
-        assetCat.includes(
-          "MOTORIZED"
-        ) ||
-        assetCat.includes(
-          "NON-MOTORIZED"
-        );
-
-
-      /* VESSEL */
-
-      if (isVessel) {
-
-        if (
-          !isCOIValidated(
-            selected
-          )
-        ) {
-
-          toast.error(
-            "Certificate of Inspection must be submitted, verified and passed before permit issuance."
-          );
-
-          return;
-        }
-
-
-        const coi =
-          coiRecords.find(
-            c =>
-              String(
-                c.vessel_id
-              ) ===
-              String(
-                selected.id
-              )
-          );
-
-
-        navigate(
-          `/admin/permit-portal/${id}`,
-          {
-            state: {
-              orNumber:
-                coi.or_number,
-              lockedOR: true
-            }
-          }
-        );
-
-        return;
-      }
-
-
-      /* OTHER ASSETS */
+      /* ALL CATEGORIES: open Payment Auth with a blank, editable OR field */
 
       setSelectedVesselId(
         id
@@ -1196,6 +1149,10 @@ vesselName:
 
       setTempOrNumber(
         ""
+      );
+
+      setIsOrLocked(
+        false
       );
 
       setIsModalOpen(
@@ -1206,6 +1163,9 @@ vesselName:
 
   /* ============================================================
      CONFIRM OR
+
+     Only reached from the vessel flow now, so isOrLocked will
+     always be true here (kept as-is for safety/clarity).
   ============================================================ */
 
   const handleConfirmOr =
@@ -1231,7 +1191,9 @@ vesselName:
         {
           state: {
             orNumber:
-              tempOrNumber
+              tempOrNumber,
+            lockedOR:
+              isOrLocked
           }
         }
       );
@@ -2662,7 +2624,7 @@ const handleFinishEdit = async () => {
         </div>
 
 
-        {/* PAYMENT MODAL */}
+        {/* PAYMENT MODAL (vessel-only) */}
 
         {isModalOpen && (
 
@@ -2693,9 +2655,28 @@ const handleFinishEdit = async () => {
 
                 placeholder="OR NO. 1234567"
 
-                className="mt-5 h-14 text-center font-black"
+                className={`mt-5 h-14 text-center font-black ${
+                  isOrLocked
+                    ? "bg-slate-100 cursor-not-allowed"
+                    : ""
+                }`}
+
+                disabled={
+                  isOrLocked
+                }
 
               />
+
+
+              {isOrLocked && (
+
+                <p className="text-[9px] text-blue-600 font-black uppercase text-center mt-2">
+
+                  OR NUMBER FROM COI - LOCKED
+
+                </p>
+
+              )}
 
 
               <div className="space-y-2 mt-5">
@@ -2885,28 +2866,9 @@ const handleFinishEdit = async () => {
                       handleChange
                     }
 
-                    disabled={
-                      isVesselType
-                    }
-
-                    className={`h-10 font-bold border-slate-200 ${
-                      isVesselType
-                        ? "bg-slate-200 cursor-not-allowed"
-                        : "bg-slate-50"
-                    }`}
+                    className="h-10 font-bold bg-slate-50 border-slate-200"
 
                   />
-
-
-                  {isVesselType && (
-
-                    <p className="text-[9px] text-blue-600 font-black uppercase">
-
-                      OR NUMBER FROM COI - LOCKED
-
-                    </p>
-
-                  )}
 
                 </div>
 

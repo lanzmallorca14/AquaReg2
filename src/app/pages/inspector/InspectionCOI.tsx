@@ -961,14 +961,18 @@ export default function InspectionCOI() {
 
       /* ======================================================
          4. DETERMINE PAPER SIZE
+
+         COI uses long bond paper. Widened relative to the
+         previous 215.9mm so the OR/Audit-Ref coupon box and
+         the rest of the form have enough horizontal room to
+         print without looking squeezed onto a narrow strip.
       ====================================================== */
 
-      // COI uses the long paper layout.
       const pageWidth =
-        215.9;
+        241.3; // ~9.5in — wide long-bond width
 
       const pageHeight =
-        355.6;
+        355.6; // 14in
 
 
       /* ======================================================
@@ -999,13 +1003,13 @@ export default function InspectionCOI() {
       ====================================================== */
 
       exportClone.style.width =
-        '8.5in';
+        '9.5in';
 
       exportClone.style.height =
         '14in';
 
       exportClone.style.minWidth =
-        '8.5in';
+        '9.5in';
 
       exportClone.style.minHeight =
         '14in';
@@ -1143,14 +1147,14 @@ export default function InspectionCOI() {
 
       const captureWidth =
         Math.round(
-          215.9 *
+          pageWidth *
           (96 / 25.4)
         );
 
 
       const captureHeight =
         Math.round(
-          355.6 *
+          pageHeight *
           (96 / 25.4)
         );
 
@@ -1801,18 +1805,6 @@ export default function InspectionCOI() {
         coiData.orNumber
           .trim()
           .toUpperCase();
-
-
-      if (
-        !cleanOR ||
-        cleanOR === 'PENDING'
-      ) {
-
-        return toast.error(
-          'O.R. Number Required'
-        );
-
-      }
 
 
       setIsSaving(true);
@@ -2712,12 +2704,16 @@ export default function InspectionCOI() {
         {/* ====================================================
             COI DOCUMENT
             ----------------------------------------------------
-            KEEPING YOUR ORIGINAL DESIGN
+            KEEPING YOUR ORIGINAL DESIGN.
+            Widened to 9.5in so the OR/Audit-Ref coupon box on
+            the right (and the rest of the form) has enough
+            horizontal room and doesn't print squeezed onto a
+            narrow strip.
         ==================================================== */}
 
         <div
           id="coi-document-content"
-          className="max-w-[8.5in] mx-auto bg-white p-[0.75in] text-black font-serif border border-slate-200 shadow-xl relative leading-tight"
+          className="max-w-[9.5in] mx-auto bg-white p-[0.75in] text-black font-serif border border-slate-200 shadow-xl relative leading-tight"
         >
 
           {/* ==================================================
@@ -3376,9 +3372,15 @@ export default function InspectionCOI() {
 
           {/* ==================================================
               SIGNATURES
+
+              The right-hand column (the O.R./Audit-Ref coupon
+              box) is now given more of the row's width than the
+              signatures column, and the box itself stretches to
+              fill that space, so it's wide instead of squeezed
+              like a narrow stub when printed.
           ================================================== */}
 
-          <div className="grid grid-cols-2 gap-12 mt-16 text-[11px] font-bold uppercase">
+          <div className="grid grid-cols-[1fr_1.4fr] gap-12 mt-16 text-[11px] font-bold uppercase">
 
             <div className="space-y-12">
 
@@ -3419,16 +3421,20 @@ export default function InspectionCOI() {
 
 
             {/* =================================================
-                O.R. BOX
+                O.R. BOX (COUPON)
+
+                Widened to fill the column: the OR Number is now
+                read-only (not typeable) since it's optional and
+                shouldn't be manually keyed in on this form.
             ================================================= */}
 
-            <div className="border-2 border-slate-900 p-6 space-y-6 rounded-xl h-fit">
+            <div className="border-2 border-slate-900 p-6 space-y-6 rounded-xl h-fit w-full">
 
-              <div className="flex justify-between items-end border-b-2 border-black pb-2">
+              <div className="flex justify-between items-end border-b-2 border-black pb-2 gap-4">
 
                 <label
                   htmlFor="orNumber"
-                  className="text-[9px] tracking-widest text-slate-500 font-black"
+                  className="text-[9px] tracking-widest text-slate-500 font-black shrink-0"
                 >
 
                   O.R. NO.:
@@ -3440,14 +3446,12 @@ export default function InspectionCOI() {
                   id="orNumber"
                   name="orNumber"
                   title="Official Receipt Number"
-                  placeholder="REQUIRED"
+                  placeholder=""
                   value={
                     coiData.orNumber
                   }
-                  onChange={
-                    handleChange
-                  }
-                  className="border-none h-6 p-0 bg-transparent text-right font-black text-xl text-blue-800 italic focus-visible:ring-0 w-36"
+                  readOnly
+                  className="border-none h-6 p-0 bg-transparent text-right font-black text-xl text-blue-800 italic focus-visible:ring-0 w-full cursor-default"
                 />
 
               </div>
@@ -3462,7 +3466,7 @@ export default function InspectionCOI() {
                 </span>
 
 
-                <div className="w-36 text-right font-mono text-[10px]">
+                <div className="w-full text-right font-mono text-[10px]">
 
                   {
                     coiData.permitNo.slice(
