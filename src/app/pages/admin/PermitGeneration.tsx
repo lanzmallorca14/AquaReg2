@@ -43,7 +43,6 @@ import { aquaOfflineDB } from '../../../offline/db';
 
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
-
 import { QRCodeSVG } from "qrcode.react";
 
 
@@ -174,27 +173,6 @@ const formatMoney = (value: string) => {
 
 
 /* ============================================================
-   SECURE QR TOKEN GENERATOR
-============================================================ */
-
-const generateQRToken = (): string => {
-
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-
-  return (
-    Math.random().toString(36).substring(2) +
-    Date.now().toString(36) +
-    Math.random().toString(36).substring(2)
-  );
-};
-
-
-/* ============================================================
    MAIN COMPONENT
 ============================================================ */
 
@@ -314,14 +292,24 @@ export default function ManualPermitPortal() {
   const [hiddenCards, setHiddenCards] =
     useState<string[]>([]);
 
-
   /* ============================================================
-     QR TOKEN STATE
+     QR VERIFICATION TOKEN
+     One token is retained for the permit and used by both
+     printable layouts.
   ============================================================ */
+  const [qrToken, setQrToken] = useState<string>("");
 
-  const [qrToken, setQrToken] =
-    useState("");
+ const getVerificationUrl = (token: string) => {
+  if (!token) return "";
 
+  const baseUrl =
+    import.meta.env.VITE_PUBLIC_APP_URL ||
+    window.location.origin;
+
+  return `${baseUrl.replace(/\/+$/, "")}/verify-permit/${encodeURIComponent(
+    token
+  )}`;
+};
 
   const expirationDate =
     "DECEMBER 31, 2026";
@@ -648,10 +636,6 @@ export default function ManualPermitPortal() {
     });
 
 
-  /* ============================================================
-     LOAD SELECTED VESSEL + PERMIT + QR TOKEN
-  ============================================================ */
-
   useEffect(() => {
 
     if (!autoVessel || isEditable) return;
@@ -689,6 +673,8 @@ export default function ManualPermitPortal() {
             vesselIdString
       );
 
+    setQrToken(String(permit?.qr_token || ""));
+
 
     console.log(
       "========== PERMIT PORTAL DATA =========="
@@ -712,25 +698,6 @@ export default function ManualPermitPortal() {
     console.log(
       "========================================"
     );
-
-
-    /* ============================================================
-       LOAD QR TOKEN
-    ============================================================ */
-
-    if (permit?.qr_token) {
-
-      setQrToken(
-        String(
-          permit.qr_token
-        )
-      );
-
-    } else {
-
-      setQrToken("");
-
-    }
 
 
     const initialOr =
@@ -1346,15 +1313,6 @@ const handleFinishEdit = async () => {
     );
   }
 };
-
-  /* ============================================================
-     QR VERIFICATION URL
-  ============================================================ */
-
-  const verificationUrl =
-    qrToken
-      ? `${window.location.origin}/verify-permit/${qrToken}`
-      : "";
 
 
   /* ============================================================
@@ -2048,6 +2006,24 @@ const handleFinishEdit = async () => {
 
 
         /* ======================================================
+           QR TOKEN
+           Preserve an existing token; otherwise generate one.
+        ====================================================== */
+        const existingQrToken =
+          existingPermits?.[0]?.qr_token || "";
+
+        const generatedQrToken =
+          existingQrToken ||
+          (typeof crypto !== "undefined" &&
+          typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+        const generatedQrAt =
+          existingPermits?.[0]?.qr_generated_at ||
+          new Date().toISOString();
+
+        /* ======================================================
            EXISTING OR NEW
         ====================================================== */
 
@@ -2091,18 +2067,7 @@ const handleFinishEdit = async () => {
         }
 
 
-        /* ======================================================
-           EXISTING QR TOKEN OR NEW QR TOKEN
-        ====================================================== */
-
-        const existingPermit =
-          existingPermits?.[0];
-
-
-        const generatedQRToken =
-          existingPermit?.qr_token ||
-          generateQRToken();
-
+        
 
         /* ======================================================
            OFFICIAL NUMBER
@@ -2211,22 +2176,12 @@ const handleFinishEdit = async () => {
           expiration_date:
             "2026-12-31",
 
-
-          /* ====================================================
-             QR VERIFICATION DATA
-          ==================================================== */
-
           qr_token:
-            generatedQRToken,
+            generatedQrToken,
 
           qr_generated_at:
-            existingPermit?.qr_generated_at ||
-            new Date().toISOString(),
-
-          verification_status:
-            "VALID"
-
-        };
+            generatedQrAt,
+};
 
 
         /* ======================================================
@@ -2253,15 +2208,6 @@ const handleFinishEdit = async () => {
 
         if (error)
           throw error;
-
-
-        /* ======================================================
-           SAVE QR TOKEN TO STATE
-        ====================================================== */
-
-        setQrToken(
-          generatedQRToken
-        );
 
 
         /* ======================================================
@@ -2304,6 +2250,8 @@ const handleFinishEdit = async () => {
           })
         );
 
+
+        setQrToken(generatedQrToken);
 
         toast.success(
           "Permit Saved Successfully. QR Verification Code Generated."
@@ -3068,55 +3016,6 @@ const handleFinishEdit = async () => {
             </Button>
 
 
-            {/* QR STATUS */}
-
-            <div className={`p-4 rounded-2xl border flex gap-3 items-start mt-4 ${
-              qrToken
-                ? "bg-emerald-50 border-emerald-100"
-                : "bg-amber-50 border-amber-100"
-            }`}>
-
-              <CheckCircle2
-                size={16}
-                className={
-                  qrToken
-                    ? "text-emerald-600 mt-0.5 shrink-0"
-                    : "text-amber-600 mt-0.5 shrink-0"
-                }
-              />
-
-              <div>
-
-                <p className={`text-[9px] font-black uppercase ${
-                  qrToken
-                    ? "text-emerald-900"
-                    : "text-amber-900"
-                }`}>
-
-                  {qrToken
-                    ? "QR Verification Ready"
-                    : "QR Not Generated Yet"}
-
-                </p>
-
-
-                <p className={`text-[8px] font-bold leading-tight mt-1 ${
-                  qrToken
-                    ? "text-emerald-700"
-                    : "text-amber-700"
-                }`}>
-
-                  {qrToken
-                    ? "The QR code is linked to the official AquaReg permit record."
-                    : "Click Save Permit to generate the verification QR code."}
-
-                </p>
-
-              </div>
-
-            </div>
-
-
             <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex gap-3 items-start mt-4">
 
               <Settings2
@@ -3131,7 +3030,6 @@ const handleFinishEdit = async () => {
               </p>
 
             </div>
-
 
           </div>
 
@@ -3232,6 +3130,24 @@ const handleFinishEdit = async () => {
                 </div>
 
               </div>
+
+            {/* QR VERIFICATION - CERTIFICATE LAYOUT */}
+{qrToken && (
+  <div
+    className="absolute top-2 right-4 z-20 bg-white p-1.5 flex flex-col items-center"
+    style={{ width: "31mm" }}
+  >
+    <QRCodeSVG
+      value={getVerificationUrl(qrToken)}
+      size={88}
+      level="H"
+      includeMargin={true}
+    />
+    <p className="text-[7px] font-black uppercase tracking-wide leading-none mt-1 text-center">
+      SCAN TO VERIFY
+    </p>
+  </div>
+)}
 
 
               {/* MAIN CONTENT */}
@@ -3733,25 +3649,6 @@ const handleFinishEdit = async () => {
 
               </div>
 
-
-              {/* =================================================
-                  QR CODE - CERTIFICATE
-              ================================================= */}
-
-       {qrToken && verificationUrl && (
-  <div className="absolute top-[8mm] right-[12mm] flex flex-col items-center bg-white p-1 z-30">
-    <QRCodeSVG
-      value={verificationUrl}
-      size={75}
-      level="H"
-      includeMargin
-    />
-
-    <p className="text-[6px] font-black uppercase mt-0.5 text-center">
-      SCAN TO VERIFY
-    </p>
-  </div>
-)}
             </div>
 
           ) : (
@@ -3800,6 +3697,25 @@ const handleFinishEdit = async () => {
                 </h2>
 
               </div>
+
+
+              {/* QR VERIFICATION - MAYOR'S PERMIT LAYOUT */}
+             {qrToken && (
+  <div
+    className="absolute top-[0.3in] left-[0.4in] z-20 bg-white p-1.5 flex flex-col items-center"
+    style={{ width: "31mm" }}
+  >
+    <QRCodeSVG
+      value={getVerificationUrl(qrToken)}
+      size={88}
+      level="H"
+      includeMargin={true}
+    />
+    <p className="text-[7px] font-black uppercase tracking-wide leading-none mt-1 text-center">
+      SCAN TO VERIFY
+    </p>
+  </div>
+)}
 
 
               {/* PERMIT NUMBER */}
@@ -4157,27 +4073,8 @@ const handleFinishEdit = async () => {
               </div>
 
 
-              {/* ==================================================
-                  QR CODE - MAYOR'S PERMIT
-              ================================================== */}
 
-           {qrToken &&
-  verificationUrl && (
-    <div className="absolute top-[0.3in] left-[0.3in] flex flex-col items-center bg-white p-2 z-30">
-
-      <QRCodeSVG
-        value={verificationUrl}
-        size={90}
-        level="H"
-        includeMargin
-      />
-
-      <p className="text-[7px] font-black uppercase mt-1 text-center">
-        SCAN TO VERIFY
-      </p>
-
-    </div>
-  )}
+           
 
               {/* FOOTER SLOGAN */}
 

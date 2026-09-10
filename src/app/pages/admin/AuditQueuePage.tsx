@@ -3,830 +3,2115 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Badge } from '../../components/ui/badge';
-import { toast } from 'sonner'; 
-import { 
-  Search, Ship, ChevronRight, User, Anchor, X, 
-  MapPin, Eye, CheckCircle2, Calculator,  
-  ShieldAlert, FileCheck, CalendarClock, LifeBuoy, Phone, XCircle, Trash2
+import { toast } from 'sonner';
+
+import {
+  Search,
+  Ship,
+  ChevronRight,
+  User,
+  Anchor,
+  X,
+  MapPin,
+  Eye,
+  CheckCircle2,
+  Calculator,
+  ShieldAlert,
+  FileCheck,
+  CalendarClock,
+  LifeBuoy,
+  Phone,
+  XCircle,
+  Trash2
 } from 'lucide-react';
+
 import { useAquaData } from '../../components/context/AquaRegCONTEXT';
 import { supabase } from '../../../supabaseClient';
 
 export default function AuditQueuePage() {
-  const { Vessels = [], loading, deleteVessel } = useAquaData(); 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedVessel, setSelectedVessel] = useState<any | null>(null);
+  const {
+    Vessels = [],
+    loading,
+    deleteVessel
+  } = useAquaData();
 
-  const handleDeleteAuditRecord = async (vessel: any) => {
+  const [searchQuery, setSearchQuery] =
+    useState("");
+
+  const [selectedVessel, setSelectedVessel] =
+    useState<any | null>(null);
+
+  /* =========================================================
+     DELETE AUDIT RECORD
+  ========================================================= */
+
+  const handleDeleteAuditRecord = async (
+    vessel: any
+  ) => {
     const confirmed = window.confirm(
       `Are you sure you want to permanently delete this audit application?\n\n` +
       `ID: ${vessel.id}\n` +
-      `Owner: ${vessel.owner_name || vessel.owner || 'N/A'}\n\n` +
+      `Owner: ${
+        vessel.owner_name ||
+        vessel.owner ||
+        'N/A'
+      }\n\n` +
       `This action cannot be undone.`
     );
 
     if (!confirmed) return;
 
     try {
-      if (typeof deleteVessel !== 'function') {
-        throw new Error('Delete function is not available in AquaRegCONTEXT.');
+      if (
+        typeof deleteVessel !==
+        'function'
+      ) {
+        throw new Error(
+          'Delete function is not available in AquaRegCONTEXT.'
+        );
       }
 
-      await deleteVessel(vessel.id);
+      await deleteVessel(
+        vessel.id
+      );
 
       setSelectedVessel(null);
 
-      toast.success('Audit application deleted', {
-        description: `Application ${vessel.id} was permanently removed.`
-      });
+      toast.success(
+        'Audit application deleted',
+        {
+          description:
+            `Application ${vessel.id} was permanently removed.`
+        }
+      );
     } catch (error: any) {
-      console.error('Audit deletion error:', error);
+      console.error(
+        'Audit deletion error:',
+        error
+      );
 
-      toast.error('Deletion failed', {
-        description:
-          error?.message || 'Unable to permanently delete this application.'
-      });
+      toast.error(
+        'Deletion failed',
+        {
+          description:
+            error?.message ||
+            'Unable to permanently delete this application.'
+        }
+      );
     }
   };
 
-  // --- UPDATED PATTERNS FOR SUPABASE SNAKE_CASE COLUMNS ---
+  /* =========================================================
+     AUDIT QUEUE
+  ========================================================= */
+
   const queue = useMemo(() => {
-    return Vessels.filter((v: any) => {
-      const isPending = v?.status?.toLowerCase() === 'pending';
-      if (!isPending) return false;
+    return Vessels.filter(
+      (v: any) => {
+        const isPending =
+          String(
+            v?.status || ''
+          ).toLowerCase() ===
+          'pending';
 
-      const query = searchQuery.toLowerCase().trim();
-      if (!query) return true;
+        if (!isPending) {
+          return false;
+        }
 
-      return (
-        v.owner_name?.toLowerCase().includes(query) ||
-        v.vessel_name?.toLowerCase().includes(query) ||
-        v.gear_type?.toLowerCase().includes(query) ||
-        String(v.id || '').toLowerCase().includes(query) ||
-        v.barangay?.toLowerCase().includes(query)
-      );
-    });
-  }, [Vessels, searchQuery]);
+        const query =
+          searchQuery
+            .toLowerCase()
+            .trim();
+
+        if (!query) {
+          return true;
+        }
+
+        return (
+          v.owner_name
+            ?.toLowerCase()
+            .includes(query) ||
+
+          v.vessel_name
+            ?.toLowerCase()
+            .includes(query) ||
+
+          v.gear_type
+            ?.toLowerCase()
+            .includes(query) ||
+
+          String(
+            v.id || ''
+          )
+            .toLowerCase()
+            .includes(query) ||
+
+          v.barangay
+            ?.toLowerCase()
+            .includes(query)
+        );
+      }
+    );
+  }, [
+    Vessels,
+    searchQuery
+  ]);
+
+  /* =========================================================
+     LOADING
+  ========================================================= */
 
   if (loading) {
     return (
       <div className="p-6 font-sans bg-slate-50 min-h-screen flex flex-col items-center justify-center">
+
         <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Loading Cloud Audit Queue...</p>
+
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+          Loading Cloud Audit Queue...
+        </p>
+
       </div>
     );
   }
+
+  /* =========================================================
+     PAGE
+  ========================================================= */
 
   return (
     <div className="relative space-y-6 animate-in fade-in duration-700 font-sans p-6 pt-10 bg-slate-50/30 min-h-screen">
-      
-      {/* Page Header */}
+
+      {/* =====================================================
+          PAGE HEADER
+      ===================================================== */}
+
       <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col lg:flex-row justify-between items-center gap-4">
+
         <div className="flex items-center gap-4 w-full lg:w-auto">
+
           <div className="bg-slate-900 p-3 rounded-2xl shadow-lg shadow-slate-200">
-            <Ship className="text-emerald-400" size={20} />
+
+            <Ship
+              className="text-emerald-400"
+              size={20}
+            />
+
           </div>
+
           <div>
-            <h1 className="text-xl font-black uppercase tracking-tighter text-slate-900 leading-none italic">Registration Audit</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{queue.length} Total Pending Review</p>
+
+            <h1 className="text-xl font-black uppercase tracking-tighter text-slate-900 leading-none italic">
+              Registration Audit
+            </h1>
+
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+              {queue.length} Total Pending Review
+            </p>
+
           </div>
+
         </div>
+
+        {/* SEARCH */}
+
         <div className="relative flex-1 lg:max-w-md">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <Input 
-            className="pl-10 h-12 rounded-xl border-slate-100 bg-slate-50/50 text-xs font-bold" 
-            placeholder="Search name, ID, or barangay..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+            size={16}
           />
+
+          <Input
+            className="pl-10 h-12 rounded-xl border-slate-100 bg-slate-50/50 text-xs font-bold"
+            placeholder="Search name, ID, or barangay..."
+            value={searchQuery}
+            onChange={(e) =>
+              setSearchQuery(
+                e.target.value
+              )
+            }
+          />
+
         </div>
+
       </div>
 
-      {/* Main Table */}
+      {/* =====================================================
+          MAIN TABLE
+      ===================================================== */}
+
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
+
         <div className="overflow-x-auto">
+
           <table className="w-full text-left border-collapse min-w-[800px]">
+
             <thead>
+
               <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Asset Details</th>
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Owner</th>
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Category</th>
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Action</th>
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Asset Details
+                </th>
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Owner
+                </th>
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">
+                  Category
+                </th>
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">
+                  Action
+                </th>
+
               </tr>
+
             </thead>
+
             <tbody className="divide-y divide-slate-50">
-              {queue.map((v: any) => {
-                const normalizedCategory = (v.asset_category || v.type || '').toLowerCase();
-                return (
-                  <tr key={v.id} className="group hover:bg-slate-50/80 transition-all">
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-emerald-400 transition-all">
-                          {normalizedCategory === 'vessel' && <Ship size={20} />}
-                          {normalizedCategory === 'payao' && <Anchor size={20} />}
-                          {['gears', 'pangulong'].includes(normalizedCategory) && <LifeBuoy size={20} />}
-                        </div>
-                        <div>
-                          <div className="font-black italic text-slate-900 uppercase tracking-tight">
-                           {normalizedCategory === 'payao' || normalizedCategory === 'balsa'
-                            ? (
-                                v.vessel_name ||
-                                v.parent_vessel_name ||
-                                v.boat_owner_vessel_name ||
-                                'UNNAMED ASSET'
-                              )
-                            : (
-                                v.vessel_name ||
-                                v.gear_type ||
-                                'UNNAMED ASSET'
-                              )}
+
+              {queue.map(
+                (v: any) => {
+
+                  const normalizedCategory =
+                    (
+                      v.asset_category ||
+                      v.type ||
+                      ''
+                    ).toLowerCase();
+
+                  return (
+                    <tr
+                      key={v.id}
+                      className="group hover:bg-slate-50/80 transition-all"
+                    >
+
+                      {/* =================================================
+                          ASSET DETAILS
+                      ================================================= */}
+
+                      <td className="px-8 py-6">
+
+                        <div className="flex items-center gap-4">
+
+                          <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-emerald-400 transition-all">
+
+                            {normalizedCategory ===
+                              'vessel' && (
+                              <Ship size={20} />
+                            )}
+
+                            {normalizedCategory ===
+                              'payao' && (
+                              <Anchor size={20} />
+                            )}
+
+                            {[
+                              'gears',
+                              'pangulong'
+                            ].includes(
+                              normalizedCategory
+                            ) && (
+                              <LifeBuoy size={20} />
+                            )}
+
                           </div>
-                          <div className="text-[9px] font-mono font-bold text-slate-400 uppercase">ID: {v.id}</div>
+
+                          <div>
+
+                            {/* =================================================
+                                FIXED VESSEL NAME DISPLAY
+
+                                Motorized vessels prioritize vessel_name.
+                            ================================================= */}
+
+                            <div className="font-black italic text-slate-900 uppercase tracking-tight">
+
+                              {normalizedCategory ===
+                                'payao' ||
+                              normalizedCategory ===
+                                'balsa'
+                                ? (
+                                    v.vessel_name ||
+                                    v.parent_vessel_name ||
+                                    v.boat_owner_vessel_name ||
+                                    v.boat_name ||
+                                    'UNNAMED ASSET'
+                                  )
+                                : normalizedCategory ===
+                                  'vessel'
+                                ? (
+                                    v.vessel_name ||
+                                    v.name ||
+                                    v.boat_name ||
+                                    v.registered_vessel_name ||
+                                    v.vesselName ||
+                                    'UNNAMED VESSEL'
+                                  )
+                                : (
+                                    v.vessel_name ||
+                                    v.gear_type ||
+                                    v.boat_name ||
+                                    'UNNAMED ASSET'
+                                  )}
+
+                            </div>
+
+                            <div className="text-[9px] font-mono font-bold text-slate-400 uppercase">
+                              ID: {v.id}
+                            </div>
+
+                          </div>
+
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6 text-xs font-black text-slate-700 uppercase italic">
-                      {v.owner_name || v.owner}
-                    </td>
-                    <td className="px-8 py-6 text-center">
-                      <Badge className="bg-blue-100 text-blue-600 border-none rounded-md text-[9px] font-black uppercase px-3">
-  {(['payao', 'balsa'].includes(
-    (v.asset_category || v.type || '').toLowerCase()
-  ))
-    ? 'PAYAO/BALSA'
-    : (v.asset_category || v.type || 'GENERAL').toUpperCase()}
-</Badge>
-                    </td>
-                   <td className="px-8 py-6">
-  <div className="flex items-center justify-end gap-2">
 
-    {/* Start Audit */}
-    <Button
-      onClick={() => setSelectedVessel(v)}
-      className="bg-slate-900 text-white rounded-xl h-11 px-5 hover:bg-blue-600 transition-all text-[10px] font-black uppercase tracking-widest"
-    >
-      Start Audit
-      <ChevronRight size={14} className="ml-2" />
-    </Button>
+                      </td>
 
-    {/* Delete Audit Record */}
-    <Button
-      type="button"
-      onClick={() => handleDeleteAuditRecord(v)}
-      variant="outline"
-      className="h-11 w-11 p-0 rounded-xl border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all"
-      title="Delete Audit Application"
-      aria-label={`Delete audit application ${v.id}`}
-    >
-      <Trash2 size={16} />
-    </Button>
+                      {/* OWNER */}
 
-  </div>
-</td>
-                  </tr>
-                );
-              })}
+                      <td className="px-8 py-6 text-xs font-black text-slate-700 uppercase italic">
+
+                        {v.owner_name ||
+                          v.owner ||
+                          'N/A'}
+
+                      </td>
+
+                      {/* CATEGORY */}
+
+                      <td className="px-8 py-6 text-center">
+
+                        <Badge className="bg-blue-100 text-blue-600 border-none rounded-md text-[9px] font-black uppercase px-3">
+
+                          {[
+                            'payao',
+                            'balsa'
+                          ].includes(
+                            (
+                              v.asset_category ||
+                              v.type ||
+                              ''
+                            ).toLowerCase()
+                          )
+                            ? 'PAYAO/BALSA'
+                            : (
+                                v.asset_category ||
+                                v.type ||
+                                'GENERAL'
+                              ).toUpperCase()}
+
+                        </Badge>
+
+                      </td>
+
+                      {/* ACTION */}
+
+                      <td className="px-8 py-6">
+
+                        <div className="flex items-center justify-end gap-2">
+
+                          {/* START AUDIT */}
+
+                          <Button
+                            onClick={() =>
+                              setSelectedVessel(v)
+                            }
+                            className="bg-slate-900 text-white rounded-xl h-11 px-5 hover:bg-blue-600 transition-all text-[10px] font-black uppercase tracking-widest"
+                          >
+                            Start Audit
+
+                            <ChevronRight
+                              size={14}
+                              className="ml-2"
+                            />
+
+                          </Button>
+
+                          {/* DELETE */}
+
+                          <Button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteAuditRecord(
+                                v
+                              )
+                            }
+                            variant="outline"
+                            className="h-11 w-11 p-0 rounded-xl border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all"
+                            title="Delete Audit Application"
+                            aria-label={`Delete audit application ${v.id}`}
+                          >
+
+                            <Trash2
+                              size={16}
+                            />
+
+                          </Button>
+
+                        </div>
+
+                      </td>
+
+                    </tr>
+                  );
+                }
+              )}
+
               {queue.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-8 py-12 text-center text-[10px] font-black text-slate-300 uppercase tracking-widest">
+
+                  <td
+                    colSpan={4}
+                    className="px-8 py-12 text-center text-[10px] font-black text-slate-300 uppercase tracking-widest"
+                  >
                     No items awaiting review inside this queue.
                   </td>
+
                 </tr>
               )}
+
             </tbody>
+
           </table>
+
         </div>
+
       </div>
 
-      {selectedVessel && <AuditDetailPopup vessel={selectedVessel} onClose={() => setSelectedVessel(null)} />}
+      {/* AUDIT POPUP */}
+
+      {selectedVessel && (
+        <AuditDetailPopup
+          vessel={selectedVessel}
+          onClose={() =>
+            setSelectedVessel(
+              null
+            )
+          }
+        />
+      )}
+
     </div>
   );
 }
 
-function DetailItem({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
+/* =========================================================
+   DETAIL ITEM
+========================================================= */
+
+function DetailItem({
+  label,
+  value,
+  icon
+}: {
+  label: string;
+  value: string;
+  icon?: ReactNode;
+}) {
   return (
     <div>
+
       <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
-        {icon} {label}
+
+        {icon}
+
+        {label}
+
       </p>
-      <p className="text-xs font-black text-slate-900 uppercase mt-0.5">{value}</p>
+
+      <p className="text-xs font-black text-slate-900 uppercase mt-0.5">
+
+        {value || 'N/A'}
+
+      </p>
+
     </div>
   );
 }
 
-function AuditDetailPopup({ vessel, onClose }: { vessel: any, onClose: () => void }) {
-  const { updateVesselStatus, scheduleInspection, inspectors = [], deleteVessel } = useAquaData();
-  const [phase, setPhase] = useState<'review' | 'schedule' | 'reject'>('review');
+/* =========================================================
+   AUDIT DETAIL POPUP
+========================================================= */
 
-  const [assignedInspectorIdNumber, setAssignedInspectorIdNumber] = useState<string>("");
-  const [scheduledDate, setScheduledDate] = useState<string>(new Date().toISOString().split('T')[0]);
+function AuditDetailPopup({
+  vessel,
+  onClose
+}: {
+  vessel: any;
+  onClose: () => void;
+}) {
+  const {
+    updateVesselStatus,
+    scheduleInspection,
+    inspectors = [],
+    deleteVessel
+  } = useAquaData();
 
-  // Rejection State
-  const [rejectionReason, setRejectionReason] = useState<string>("Invalid Valid ID");
-  const [rejectionNotes, setRejectionNotes] = useState<string>("");
-  const [isSubmittingRejection, setIsSubmittingRejection] = useState<boolean>(false);
+  const [phase, setPhase] =
+    useState<
+      'review' |
+      'schedule' |
+      'reject'
+    >('review');
+
+  const [
+    assignedInspectorIdNumber,
+    setAssignedInspectorIdNumber
+  ] = useState<string>("");
+
+  const [
+    scheduledDate,
+    setScheduledDate
+  ] = useState<string>(
+    new Date()
+      .toISOString()
+      .split('T')[0]
+  );
+
+  /* =========================================================
+     REJECTION STATE
+  ========================================================= */
+
+  const [
+    rejectionReason,
+    setRejectionReason
+  ] = useState<string>(
+    "Invalid Valid ID"
+  );
+
+  const [
+    rejectionNotes,
+    setRejectionNotes
+  ] = useState<string>("");
+
+  const [
+    isSubmittingRejection,
+    setIsSubmittingRejection
+  ] = useState<boolean>(
+    false
+  );
+
+  /* =========================================================
+     CATEGORY
+  ========================================================= */
 
   const rawCategory = (
-  vessel.asset_category ||
-  vessel.type ||
-  ''
-).toLowerCase();
+    vessel.asset_category ||
+    vessel.type ||
+    ''
+  ).toLowerCase();
 
-const isPangulong = rawCategory === 'pangulong';
+  const isPangulong =
+    rawCategory ===
+    'pangulong';
 
-const isFishingGear = rawCategory === 'gears';
+  const isFishingGear =
+    rawCategory ===
+    'gears';
 
-const isPayao = ['payao', 'balsa'].includes(rawCategory);
-
-const isMotorizedVessel =
-  rawCategory === 'vessel' &&
-  (
-    vessel.vesselType === 'motorized' ||
-    vessel.is_motorized === true
-  );
-
-const isNonMotorizedVessel =
-  rawCategory === 'vessel' &&
-  (
-    vessel.vesselType === 'non-motorized' ||
-    vessel.is_motorized === false
-  );
-
-const isGearCategory = [
-  'payao',
-  'balsa',
-  'pangulong',
-  'gears'
-].includes(rawCategory);
-
-  // Document requirement setup:
-  const activeDocKeys = useMemo(() => {
-    if (isGearCategory) {
-      return ['bfarPermit', 'marinaPermit', 'barangayClearance', 'cedula'];
-    }
-    return ['barangayClearance', 'validID', 'cedula'];
-  }, [isGearCategory]);
-
-  const activePersonnel = useMemo(() => {
-    return (inspectors || []).filter((ins: any) => ins.status === 'approved');
-  }, [inspectors]);
-
-  const handleProceed = async () => {
-    if (isGearCategory) {
-      if (typeof updateVesselStatus === 'function') {
-        await updateVesselStatus(vessel.id, 'Passed');
-        toast.success(`${(vessel.asset_category || 'Asset').toUpperCase()} Approved Directly`);
-      } else {
-        toast.error("Database connection function missing.");
-      }
-      onClose();
-    } else {
-      setPhase('schedule');
-    }
-  };
-
-  const handleRejectSubmission = async () => {
-    if (!rejectionReason) {
-      return toast.error("Please select a reason for rejection.");
-    }
-
-    setIsSubmittingRejection(true);
-    try {
-      const fullReasonText = rejectionNotes ? `${rejectionReason}: ${rejectionNotes}` : rejectionReason;
-
-      // Changed table name from 'vessels' to 'Vessels' to match database case sensitivity
-      const { error } = await supabase
-        .from('Vessels')
-        .update({ 
-          status: 'Rejected', 
-          rejection_reason: fullReasonText,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', vessel.id);
-
-      if (error) throw error;
-
-      // Optional context fallback update if function exists
-      if (typeof updateVesselStatus === 'function') {
-        await updateVesselStatus(vessel.id, 'Rejected');
-      }
-
-      toast.error("Registration Rejected", {
-        description: `Application ID ${vessel.id} marked as rejected.`
-      });
-      onClose();
-    } catch (err: any) {
-      console.error("Rejection submission error:", err);
-      toast.error("Failed to update status", {
-        description: err.message || "An error occurred while marking as rejected."
-      });
-    } finally {
-      setIsSubmittingRejection(false);
-    }
-  };
-
-  const handleFinalSchedule = async () => {
-    if (!assignedInspectorIdNumber) {
-      return toast.error("Officer Assignment Required");
-    }
-
-    try {
-      if (typeof scheduleInspection === "function") {
-        await scheduleInspection(
-          vessel.id,
-          assignedInspectorIdNumber,
-          scheduledDate
-        );
-      } else if (typeof updateVesselStatus === "function") {
-        await updateVesselStatus(
-          vessel.id,
-          "Scheduled"
-        );
-      } else {
-        throw new Error("Missing structural mutators inside context wrapper");
-      }
-
-      toast.success(
-        "Successfully scheduled for inspection.",
-        {
-          description: "The inspection has been successfully scheduled."
-        }
-      );
-
-      onClose();
-    } catch (error) {
-      console.error("Schedule Error:", error);
-      toast.error(
-        "Scheduling failed",
-        {
-          description: "Unable to bind assigned personnel profile."
-        }
-      );
-    }
-  };
-
-  const handleDeleteAuditRecord = async () => {
-    const confirmed = window.confirm(
-      `Are you sure you want to permanently delete this audit application?\n\n` +
-      `ID: ${vessel.id}\n` +
-      `Owner: ${vessel.owner_name || vessel.owner || 'N/A'}\n\n` +
-      `This action cannot be undone.`
+  const isPayao =
+    [
+      'payao',
+      'balsa'
+    ].includes(
+      rawCategory
     );
 
-    if (!confirmed) return;
+  /* =========================================================
+     MOTORIZED VESSEL
+  ========================================================= */
 
-    try {
-      if (typeof deleteVessel !== 'function') {
-        throw new Error('Delete function is not available in AquaRegCONTEXT.');
+  const isMotorizedVessel =
+    rawCategory ===
+      'vessel' &&
+    (
+      vessel.vesselType ===
+        'motorized' ||
+
+      vessel.vessel_type ===
+        'motorized' ||
+
+      vessel.is_motorized ===
+        true
+    );
+
+  /* =========================================================
+     NON-MOTORIZED VESSEL
+  ========================================================= */
+
+  const isNonMotorizedVessel =
+    rawCategory ===
+      'vessel' &&
+    (
+      vessel.vesselType ===
+        'non-motorized' ||
+
+      vessel.vessel_type ===
+        'non-motorized' ||
+
+      vessel.is_motorized ===
+        false
+    );
+
+  /* =========================================================
+     GEAR CATEGORY
+  ========================================================= */
+
+  const isGearCategory = [
+    'payao',
+    'balsa',
+    'pangulong',
+    'gears'
+  ].includes(
+    rawCategory
+  );
+
+  /* =========================================================
+     FIXED DISPLAY VESSEL NAME
+     
+     This is the main fix requested.
+     
+     For motorized vessels:
+       vessel.vessel_name
+     
+     is checked first.
+  ========================================================= */
+
+  const displayVesselName =
+    useMemo(() => {
+
+      const nameCandidates = [
+        vessel.vessel_name,
+        vessel.name,
+        vessel.boat_name,
+        vessel.registered_vessel_name,
+        vessel.vesselName
+      ];
+
+      const validName =
+        nameCandidates.find(
+          (name) =>
+            typeof name ===
+              'string' &&
+            name.trim()
+              .length > 0
+        );
+
+      if (validName) {
+        return validName.trim();
       }
 
-      await deleteVessel(vessel.id);
+      if (isPayao) {
+        return (
+          vessel.payao_vessel_name ||
+          vessel.parent_vessel_name ||
+          'UNNAMED ASSET'
+        );
+      }
 
-      onClose();
+      if (isPangulong) {
+        return (
+          vessel.gear_type ||
+          'UNNAMED PANGULONG'
+        );
+      }
 
-      toast.success('Audit application deleted', {
-        description: `Application ${vessel.id} was permanently removed.`
-      });
-    } catch (error: any) {
-      console.error('Audit deletion error:', error);
+      if (isFishingGear) {
+        return (
+          vessel.gear_type ||
+          'UNNAMED FISHING GEAR'
+        );
+      }
 
-      toast.error('Deletion failed', {
-        description:
-          error?.message || 'Unable to permanently delete this application.'
-      });
-    }
-  };
+      if (
+        rawCategory ===
+        'vessel'
+      ) {
+        return 'UNNAMED VESSEL';
+      }
 
-  const renderTechnicalSpecs = () => {
-    return (
-      <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm relative overflow-hidden">
-        <div className="flex items-center gap-2 mb-8">
-          <Anchor className="text-emerald-500" size={18} />
-          <h4 className="text-[10px] font-black uppercase text-emerald-600 tracking-widest italic">Technical Specs</h4>
+      return 'Audit Review';
+
+    }, [
+      vessel,
+      isPayao,
+      isPangulong,
+      isFishingGear,
+      rawCategory
+    ]);
+
+  /* =========================================================
+     DOCUMENT REQUIREMENTS
+  ========================================================= */
+
+  const activeDocKeys =
+    useMemo(() => {
+
+      if (isGearCategory) {
+        return [
+          'bfarPermit',
+          'marinaPermit',
+          'barangayClearance',
+          'cedula'
+        ];
+      }
+
+      return [
+        'barangayClearance',
+        'validID',
+        'cedula'
+      ];
+
+    }, [
+      isGearCategory
+    ]);
+
+  /* =========================================================
+     ACTIVE PERSONNEL
+  ========================================================= */
+
+  const activePersonnel =
+    useMemo(() => {
+
+      return (
+        inspectors || []
+      ).filter(
+        (ins: any) =>
+          ins.status ===
+          'approved'
+      );
+
+    }, [
+      inspectors
+    ]);
+
+  /* =========================================================
+     PROCEED
+  ========================================================= */
+
+  const handleProceed =
+    async () => {
+
+      if (isGearCategory) {
+
+        try {
+
+          if (
+            typeof updateVesselStatus ===
+            'function'
+          ) {
+
+            await updateVesselStatus(
+              vessel.id,
+              'Passed'
+            );
+
+            toast.success(
+              `${
+                (
+                  vessel.asset_category ||
+                  'Asset'
+                ).toUpperCase()
+              } Approved Directly`
+            );
+
+          } else {
+
+            toast.error(
+              "Database connection function missing."
+            );
+
+            return;
+          }
+
+          onClose();
+
+        } catch (error: any) {
+
+          console.error(
+            'Direct approval error:',
+            error
+          );
+
+          toast.error(
+            'Approval failed',
+            {
+              description:
+                error?.message ||
+                'Unable to update application status.'
+            }
+          );
+        }
+
+      } else {
+
+        setPhase(
+          'schedule'
+        );
+
+      }
+    };
+
+  /* =========================================================
+     REJECT SUBMISSION
+  ========================================================= */
+
+  const handleRejectSubmission =
+    async () => {
+
+      if (!rejectionReason) {
+        return toast.error(
+          "Please select a reason for rejection."
+        );
+      }
+
+      setIsSubmittingRejection(
+        true
+      );
+
+      try {
+
+        const fullReasonText =
+          rejectionNotes
+            ? `${rejectionReason}: ${rejectionNotes}`
+            : rejectionReason;
+
+        /* =================================================
+           UPDATE SUPABASE
+        ================================================= */
+
+        const {
+          error
+        } = await supabase
+          .from('Vessels')
+          .update({
+            status:
+              'Rejected',
+
+            rejection_reason:
+              fullReasonText,
+
+            updated_at:
+              new Date()
+                .toISOString()
+          })
+          .eq(
+            'id',
+            vessel.id
+          );
+
+        if (error) {
+          throw error;
+        }
+
+        /* =================================================
+           CONTEXT FALLBACK
+        ================================================= */
+
+        if (
+          typeof updateVesselStatus ===
+          'function'
+        ) {
+
+          await updateVesselStatus(
+            vessel.id,
+            'Rejected'
+          );
+        }
+
+        toast.error(
+          "Registration Rejected",
+          {
+            description:
+              `Application ID ${vessel.id} marked as rejected.`
+          }
+        );
+
+        onClose();
+
+      } catch (err: any) {
+
+        console.error(
+          "Rejection submission error:",
+          err
+        );
+
+        toast.error(
+          "Failed to update status",
+          {
+            description:
+              err?.message ||
+              "An error occurred while marking as rejected."
+          }
+        );
+
+      } finally {
+
+        setIsSubmittingRejection(
+          false
+        );
+      }
+    };
+
+  /* =========================================================
+     FINAL SCHEDULE
+  ========================================================= */
+
+  const handleFinalSchedule =
+    async () => {
+
+      if (
+        !assignedInspectorIdNumber
+      ) {
+
+        return toast.error(
+          "Officer Assignment Required"
+        );
+      }
+
+      try {
+
+        if (
+          typeof scheduleInspection ===
+          "function"
+        ) {
+
+          await scheduleInspection(
+            vessel.id,
+            assignedInspectorIdNumber,
+            scheduledDate
+          );
+
+        } else if (
+          typeof updateVesselStatus ===
+          "function"
+        ) {
+
+          await updateVesselStatus(
+            vessel.id,
+            "Scheduled"
+          );
+
+        } else {
+
+          throw new Error(
+            "Missing structural mutators inside context wrapper"
+          );
+        }
+
+        toast.success(
+          "Successfully scheduled for inspection.",
+          {
+            description:
+              "The inspection has been successfully scheduled."
+          }
+        );
+
+        onClose();
+
+      } catch (error: any) {
+
+        console.error(
+          "Schedule Error:",
+          error
+        );
+
+        toast.error(
+          "Scheduling failed",
+          {
+            description:
+              error?.message ||
+              "Unable to bind assigned personnel profile."
+          }
+        );
+      }
+    };
+
+  /* =========================================================
+     DELETE FROM POPUP
+  ========================================================= */
+
+  const handleDeleteAuditRecord =
+    async () => {
+
+      const confirmed =
+        window.confirm(
+          `Are you sure you want to permanently delete this audit application?\n\n` +
+          `ID: ${vessel.id}\n` +
+          `Owner: ${
+            vessel.owner_name ||
+            vessel.owner ||
+            'N/A'
+          }\n\n` +
+          `This action cannot be undone.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+
+        if (
+          typeof deleteVessel !==
+          'function'
+        ) {
+
+          throw new Error(
+            'Delete function is not available in AquaRegCONTEXT.'
+          );
+        }
+
+        await deleteVessel(
+          vessel.id
+        );
+
+        onClose();
+
+        toast.success(
+          'Audit application deleted',
+          {
+            description:
+              `Application ${vessel.id} was permanently removed.`
+          }
+        );
+
+      } catch (error: any) {
+
+        console.error(
+          'Audit deletion error:',
+          error
+        );
+
+        toast.error(
+          'Deletion failed',
+          {
+            description:
+              error?.message ||
+              'Unable to permanently delete this application.'
+          }
+        );
+      }
+    };
+
+  /* =========================================================
+     TECHNICAL SPECS
+  ========================================================= */
+
+  const renderTechnicalSpecs =
+    () => {
+
+      return (
+        <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm relative overflow-hidden">
+
+          <div className="flex items-center gap-2 mb-8">
+
+            <Anchor
+              className="text-emerald-500"
+              size={18}
+            />
+
+            <h4 className="text-[10px] font-black uppercase text-emerald-600 tracking-widest italic">
+              Technical Specs
+            </h4>
+
+          </div>
+
+          <div className="grid grid-cols-2 gap-y-8 mb-8">
+
+            <DetailItem
+              label="Category"
+              value={
+                isPayao
+                  ? 'PAYAO/BALSA'
+                  : rawCategory ===
+                    'gears'
+                  ? 'FISHING GEAR'
+                  : rawCategory.toUpperCase() ||
+                    '---'
+              }
+            />
+
+            {rawCategory ===
+            'vessel' ? (
+
+              <DetailItem
+                label="Propulsion"
+                value={
+                  isMotorizedVessel
+                    ? 'MOTORIZED'
+                    : isNonMotorizedVessel
+                    ? 'NON-MOTORIZED'
+                    : vessel.vesselType?.toUpperCase() ||
+                      vessel.vessel_type?.toUpperCase() ||
+                      (
+                        vessel.is_motorized
+                          ? 'MOTORIZED'
+                          : 'NON-MOTORIZED'
+                      )
+                }
+                icon={
+                  <Ship
+                    size={14}
+                    className="text-blue-600"
+                  />
+                }
+              />
+
+            ) : rawCategory ===
+                'payao' ||
+              rawCategory ===
+                'balsa' ? (
+
+              null
+
+            ) : (
+
+              <DetailItem
+                label="Method/Type"
+                value={
+                  vessel.gear_type ||
+                  rawCategory.toUpperCase() ||
+                  'STATIONARY'
+                }
+                icon={
+                  <LifeBuoy
+                    size={14}
+                    className="text-orange-500"
+                  />
+                }
+              />
+
+            )}
+
+          </div>
+
+          {![
+            'payao',
+            'balsa',
+            'gears',
+            'pangulong'
+          ].includes(
+            rawCategory
+          ) && (
+
+            <div className="pt-8 border-t border-slate-100 grid grid-cols-3 gap-2">
+
+              <DetailItem
+                label="Length (M)"
+                value={
+                  vessel.hull_length ||
+                  '0.00'
+                }
+              />
+
+              <DetailItem
+                label="Width (M)"
+                value={
+                  vessel.hull_width ||
+                  '0.00'
+                }
+              />
+
+              <DetailItem
+                label="Depth (M)"
+                value={
+                  vessel.hull_depth ||
+                  '0.00'
+                }
+              />
+
+            </div>
+
+          )}
+
         </div>
-        
-        <div className="grid grid-cols-2 gap-y-8 mb-8">
-         <DetailItem
-  label="Category"
-  value={
-    isPayao
-      ? 'PAYAO/BALSA'
-      : rawCategory === 'gears'
-        ? 'FISHING GEAR'
-        : rawCategory.toUpperCase() || '---'
-  }
-/>
-          
-        {rawCategory === 'vessel' ? (
-  <DetailItem
-    label="Propulsion"
-    value={
-      isMotorizedVessel
-        ? 'MOTORIZED'
-        : isNonMotorizedVessel
-          ? 'NON-MOTORIZED'
-          : vessel.vesselType?.toUpperCase() ||
-            (vessel.is_motorized ? 'MOTORIZED' : 'NON-MOTORIZED')
-    }
-    icon={<Ship size={14} className="text-blue-600" />}
-  />
-) : rawCategory === 'payao' || rawCategory === 'balsa' ? null : (
-  <DetailItem
-    label="Method/Type"
-    value={vessel.gear_type || rawCategory.toUpperCase() || 'STATIONARY'}
-    icon={<LifeBuoy size={14} className="text-orange-500" />}
-  />
-)}
-        </div>
+      );
+    };
 
-      {!['payao', 'balsa', 'gears', 'pangulong'].includes(rawCategory) && (
-  <div className="pt-8 border-t border-slate-100 grid grid-cols-3 gap-2">
-    <DetailItem
-      label="Length (M)"
-      value={vessel.hull_length || '0.00'}
-    />
-
-    <DetailItem
-      label="Width (M)"
-      value={vessel.hull_width || '0.00'}
-    />
-
-    <DetailItem
-      label="Depth (M)"
-      value={vessel.hull_depth || '0.00'}
-    />
-  </div>
-)}
-      </div>
-    );
-  };
+  /* =========================================================
+     MODAL
+  ========================================================= */
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md" onClick={onClose} />
+
+      {/* BACKDROP */}
+
+      <div
+        className="absolute inset-0 bg-slate-950/90 backdrop-blur-md"
+        onClick={onClose}
+      />
+
+      {/* MODAL */}
+
       <div className="relative bg-white w-full max-w-7xl h-[92vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
-        
-        {/* Modal Header */}
+
+        {/* =================================================
+            MODAL HEADER
+        ================================================= */}
+
         <div className="bg-slate-900 p-8 text-white flex justify-between items-center shrink-0">
+
           <div className="flex gap-6 items-center">
+
             <div className="h-16 w-16 bg-blue-600 rounded-3xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <Calculator size={32} />
+
+              <Calculator
+                size={32}
+              />
+
             </div>
+
             <div>
-           <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">
-            {vessel.vessel_name || vessel.gear_type || 'Audit Review'}
-          </h2>
 
-          <div className="mt-2">
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              ID: {vessel.id}
+              {/* =================================================
+                  FIXED:
+                  ACTUAL VESSEL NAME DISPLAY
+              ================================================= */}
+
+              <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">
+                {displayVesselName}
+              </h2>
+
+              <div className="mt-2">
+
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  ID: {vessel.id}
+                </div>
+
+                <Badge className="mt-2 bg-blue-500 text-white border-none text-[9px] font-black uppercase tracking-widest">
+
+                  {(
+                    vessel.asset_category ||
+                    vessel.type ||
+                    'ASSET'
+                  ).toUpperCase()}
+
+                  {' '}Audit
+
+                </Badge>
+
+              </div>
+
             </div>
 
-            <Badge className="mt-2 bg-blue-500 text-white border-none text-[9px] font-black uppercase tracking-widest">
-              {(vessel.asset_category || vessel.type)?.toUpperCase()} Audit
-            </Badge>
           </div>
-            </div>
-          </div>
-          
+
           <div className="flex gap-3">
-            <button 
-              onClick={() => handleDeleteAuditRecord()} 
+
+            {/* DELETE */}
+
+            <button
+              onClick={
+                handleDeleteAuditRecord
+              }
               className="p-4 hover:bg-red-600 rounded-2xl transition-all group"
               aria-label="Delete Audit Record"
               title="Delete Audit Record"
             >
-              <Trash2 className="group-hover:scale-110 transition-transform" />
+
+              <Trash2
+                className="group-hover:scale-110 transition-transform"
+              />
+
             </button>
-            <button 
-              onClick={onClose} 
+
+            {/* CLOSE */}
+
+            <button
+              onClick={onClose}
               className="p-4 hover:bg-red-500 rounded-2xl transition-all group"
               aria-label="Close Audit Popup"
               title="Close Audit Popup"
             >
-              <X className="group-hover:rotate-90 transition-transform" />
+
+              <X
+                className="group-hover:rotate-90 transition-transform"
+              />
+
             </button>
+
           </div>
+
         </div>
 
+        {/* =================================================
+            MODAL CONTENT
+        ================================================= */}
+
         <div className="flex-1 overflow-y-auto p-10 bg-slate-50/50">
-          {phase === 'review' && (
+
+          {/* =================================================
+              REVIEW PHASE
+          ================================================= */}
+
+          {phase ===
+            'review' && (
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-              
+
+              {/* LEFT */}
+
               <div className="lg:col-span-4 space-y-6">
+
+                {/* OWNER INFORMATION */}
+
                 <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm">
-                  <h4 className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-6 flex items-center gap-2"><User size={14}/> Owner Information</h4>
+
+                  <h4 className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-6 flex items-center gap-2">
+
+                    <User
+                      size={14}
+                    />
+
+                    Owner Information
+
+                  </h4>
+
                   <div className="space-y-4">
+
                     <DetailItem
                       label="Full Legal Name"
-                      value={vessel.owner_name || vessel.owner}
-                      icon={<User size={14} />}
+                      value={
+                        vessel.owner_name ||
+                        vessel.owner ||
+                        'N/A'
+                      }
+                      icon={
+                        <User
+                          size={14}
+                        />
+                      }
                     />
 
                     <DetailItem
                       label="CP Number"
-                      value={vessel.phone || vessel.cp_number || 'N/A'}
-                      icon={<Phone size={14} />}
+                      value={
+                        vessel.phone ||
+                        vessel.cp_number ||
+                        'N/A'
+                      }
+                      icon={
+                        <Phone
+                          size={14}
+                        />
+                      }
                     />
 
                     <DetailItem
                       label="Sitio / Brgy"
-                      value={`${vessel.sitio || 'N/A'}, Brgy. ${vessel.barangay || 'N/A'}`}
-                      icon={<MapPin size={14} />}
+                      value={`${
+                        vessel.sitio ||
+                        'N/A'
+                      }, Brgy. ${
+                        vessel.barangay ||
+                        'N/A'
+                      }`}
+                      icon={
+                        <MapPin
+                          size={14}
+                        />
+                      }
                     />
 
-                   {!isPangulong && !isPayao && !isFishingGear && (
-                  <>
-                    <DetailItem
-                      label="Place of Built"
-                      value={vessel.place_of_built || 'N/A'}
-                    />
+                    {!isPangulong &&
+                      !isPayao &&
+                      !isFishingGear && (
 
-                    <DetailItem
-                      label="Year Built"
-                      value={vessel.year_built || 'N/A'}
-                    />
-                  </>
-                )}
+                        <>
+
+                          <DetailItem
+                            label="Place of Built"
+                            value={
+                              vessel.place_of_built ||
+                              'N/A'
+                            }
+                          />
+
+                          <DetailItem
+                            label="Year Built"
+                            value={
+                              vessel.year_built ||
+                              'N/A'
+                            }
+                          />
+
+                        </>
+
+                      )}
+
                   </div>
+
                 </div>
 
+                {/* =================================================
+                    CATEGORY-SPECIFIC DETAILS
+                ================================================= */}
 
-          {/* CATEGORY-SPECIFIC DETAILS */}
-{(isPangulong || isFishingGear || isPayao) && (
-  <div className="bg-white p-8 rounded-[2.5rem] shadow-sm">
-    <div className="flex items-center gap-2 mb-6">
-      <LifeBuoy className="text-emerald-500" size={18} />
+                {(
+                  isPangulong ||
+                  isFishingGear ||
+                  isPayao
+                ) && (
 
-      <h4 className="text-[10px] font-black uppercase text-emerald-600 tracking-widest italic">
-        Asset Details
-      </h4>
-    </div>
+                  <div className="bg-white p-8 rounded-[2.5rem] shadow-sm">
 
-    <div>
-      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
-        Units in Words
-      </p>
+                    <div className="flex items-center gap-2 mb-6">
 
-      <div className="p-4 mt-1 rounded-xl text-sm font-black uppercase text-black whitespace-pre-line">
-        {isPayao
-          ? (
-              <>
-                {vessel.units_in_words || 'ENTER UNIT COUNT'}
-                {(vessel.boat_name || vessel.payao_numbers) && (
-                  <>
-                    {'\n'}
-                    {vessel.boat_name || vessel.payao_numbers}
-                  </>
+                      <LifeBuoy
+                        className="text-emerald-500"
+                        size={18}
+                      />
+
+                      <h4 className="text-[10px] font-black uppercase text-emerald-600 tracking-widest italic">
+                        Asset Details
+                      </h4>
+
+                    </div>
+
+                    <div>
+
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                        Units in Words
+                      </p>
+
+                      <div className="p-4 mt-1 rounded-xl text-sm font-black uppercase text-black whitespace-pre-line">
+
+                        {isPayao ? (
+
+                          <>
+
+                            {vessel.units_in_words ||
+                              'ENTER UNIT COUNT'}
+
+                            {(
+                              vessel.boat_name ||
+                              vessel.payao_numbers
+                            ) && (
+
+                              <>
+
+                                {'\n'}
+
+                                {
+                                  vessel.boat_name ||
+                                  vessel.payao_numbers
+                                }
+
+                              </>
+
+                            )}
+
+                          </>
+
+                        ) : (
+
+                          vessel.units_in_words ||
+
+                          (
+                            isPangulong
+                              ? 'ONE (1) UNIT RING NET (PANGULONG)'
+                              : `ONE (1) UNIT ${
+                                  vessel.gear_type ||
+                                  'JIGGING'
+                                }`
+                          )
+
+                        )}
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
                 )}
-              </>
-            )
-          : vessel.units_in_words ||
-            (
-              isPangulong
-                ? 'ONE (1) UNIT RING NET (PANGULONG)'
-                : `ONE (1) UNIT ${vessel.gear_type || 'JIGGING'}`
-            )}
-      </div>
-    </div>
-  </div>
-)}
+
+                {/* TECHNICAL */}
+
                 {renderTechnicalSpecs()}
 
-              {isMotorizedVessel && (
+                {/* =================================================
+                    MOTORIZED TONNAGE
+                ================================================= */}
+
+                {isMotorizedVessel && (
+
                   <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
-                    <Anchor className="absolute -right-6 -bottom-6 text-white/5 rotate-12" size={160} />
+
+                    <Anchor
+                      className="absolute -right-6 -bottom-6 text-white/5 rotate-12"
+                      size={160}
+                    />
+
                     <div className="relative z-10">
-                      <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-6 italic">Verified Tonnage</h4>
+
+                      <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-6 italic">
+                        Verified Tonnage
+                      </h4>
+
                       <div className="grid grid-cols-2 gap-4">
+
                         <div className="p-4 bg-white/5 rounded-3xl border border-white/10 backdrop-blur-sm">
-                          <p className="text-[9px] font-black text-blue-400 uppercase tracking-tighter">Gross Tonnage</p>
-                          <p className="text-2xl font-black italic">{vessel.tonnage_gross || '0.00'}</p>
+
+                          <p className="text-[9px] font-black text-blue-400 uppercase tracking-tighter">
+                            Gross Tonnage
+                          </p>
+
+                          <p className="text-2xl font-black italic">
+                            {vessel.tonnage_gross ||
+                              '0.00'}
+                          </p>
+
                         </div>
+
                         <div className="p-4 bg-white/5 rounded-3xl border border-white/10 backdrop-blur-sm">
-                          <p className="text-[9px] font-black text-emerald-400 uppercase tracking-tighter">Net Tonnage</p>
-                          <p className="text-2xl font-black italic">{vessel.tonnage_net || '0.00'}</p>
+
+                          <p className="text-[9px] font-black text-emerald-400 uppercase tracking-tighter">
+                            Net Tonnage
+                          </p>
+
+                          <p className="text-2xl font-black italic">
+                            {vessel.tonnage_net ||
+                              '0.00'}
+                          </p>
+
                         </div>
+
                       </div>
+
                     </div>
+
                   </div>
+
                 )}
 
+                {/* ACTIONS */}
+
                 <div className="space-y-3">
-                  <Button onClick={handleProceed} className="w-full h-16 bg-emerald-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-700 transition-all">
-                    {isGearCategory ? 'Verify & Pass Audit' : 'Verify & Schedule Inspection'} <ChevronRight size={18} className="ml-2" />
+
+                  <Button
+                    onClick={
+                      handleProceed
+                    }
+                    className="w-full h-16 bg-emerald-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-700 transition-all"
+                  >
+
+                    {isGearCategory
+                      ? 'Verify & Pass Audit'
+                      : 'Verify & Schedule Inspection'}
+
+                    <ChevronRight
+                      size={18}
+                      className="ml-2"
+                    />
+
                   </Button>
 
-                  <Button onClick={() => setPhase('reject')} variant="outline" className="w-full h-14 border-2 border-red-200 bg-red-50/50 text-red-600 hover:bg-red-600 hover:text-white rounded-[2rem] font-black uppercase text-xs tracking-widest transition-all">
-                    <XCircle size={18} className="mr-2" /> Reject Application
+                  <Button
+                    onClick={() =>
+                      setPhase(
+                        'reject'
+                      )
+                    }
+                    variant="outline"
+                    className="w-full h-14 border-2 border-red-200 bg-red-50/50 text-red-600 hover:bg-red-600 hover:text-white rounded-[2rem] font-black uppercase text-xs tracking-widest transition-all"
+                  >
+
+                    <XCircle
+                      size={18}
+                      className="mr-2"
+                    />
+
+                    Reject Application
+
                   </Button>
+
                 </div>
+
               </div>
+
+              {/* =================================================
+                  DOCUMENT VAULT
+              ================================================= */}
 
               <div className="lg:col-span-8 bg-white rounded-[3rem] border border-slate-200 shadow-inner overflow-hidden flex flex-col">
-                <div className="bg-slate-50 p-6 border-b flex items-center gap-3">
-                  <FileCheck size={16} className="text-slate-900"/>
-                  <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Document Vault Review</p>
-                </div>
-                <div className="flex-1 overflow-y-auto p-8 bg-slate-100/30">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-10">
-                    {activeDocKeys.map((key) => {
-                      const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-                      const altSnakeKey = key === 'validID' ? 'valid_id' : snakeKey;
-                      
-                      const src = 
-                        vessel.requirements?.[key] || 
-                        vessel.requirements?.[altSnakeKey] ||
-                        vessel.documents?.[key] || 
-                        vessel.documents?.[altSnakeKey] ||
-                        vessel[key] || 
-                        vessel[altSnakeKey];
 
-                      return (
-                        <div key={key} className="space-y-3">
-                          <p className="text-[10px] font-black uppercase text-slate-500 italic px-2">
-                            {key.replace(/([A-Z])/g, ' $1').replace('bfar', 'BFAR').toUpperCase()}
-                          </p>
-                          {src ? (
-                            <div className="rounded-[2.5rem] border-4 border-white shadow-xl overflow-hidden aspect-[4/3] bg-slate-200 relative group cursor-pointer">
-                               <img src={src} className="w-full h-full object-cover" alt={key} />
-                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                 <Eye className="text-white" size={30} />
-                               </div>
-                            </div>
-                          ) : (
-                            <div className="border-4 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center aspect-[4/3] bg-slate-100/50 text-slate-400">
-                              <ShieldAlert size={24} className="mb-2 opacity-50" />
-                              <p className="text-[9px] font-black uppercase tracking-widest">Document Missing</p>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="bg-slate-50 p-6 border-b flex items-center gap-3">
+
+                  <FileCheck
+                    size={16}
+                    className="text-slate-900"
+                  />
+
+                  <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">
+                    Document Vault Review
+                  </p>
+
                 </div>
+
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-100/30">
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-10">
+
+                    {activeDocKeys.map(
+                      (key) => {
+
+                        const snakeKey =
+                          key.replace(
+                            /[A-Z]/g,
+                            letter =>
+                              `_${letter.toLowerCase()}`
+                          );
+
+                        const altSnakeKey =
+                          key ===
+                          'validID'
+                            ? 'valid_id'
+                            : snakeKey;
+
+                        const src =
+                          vessel.requirements?.[
+                            key
+                          ] ||
+
+                          vessel.requirements?.[
+                            altSnakeKey
+                          ] ||
+
+                          vessel.documents?.[
+                            key
+                          ] ||
+
+                          vessel.documents?.[
+                            altSnakeKey
+                          ] ||
+
+                          vessel[key] ||
+
+                          vessel[
+                            altSnakeKey
+                          ];
+
+                        return (
+                          <div
+                            key={key}
+                            className="space-y-3"
+                          >
+
+                            <p className="text-[10px] font-black uppercase text-slate-500 italic px-2">
+
+                              {key
+                                .replace(
+                                  /([A-Z])/g,
+                                  ' $1'
+                                )
+                                .replace(
+                                  'bfar',
+                                  'BFAR'
+                                )
+                                .toUpperCase()}
+
+                            </p>
+
+                            {src ? (
+
+                              <div className="rounded-[2.5rem] border-4 border-white shadow-xl overflow-hidden aspect-[4/3] bg-slate-200 relative group cursor-pointer">
+
+                                <img
+                                  src={src}
+                                  className="w-full h-full object-cover"
+                                  alt={key}
+                                />
+
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+
+                                  <Eye
+                                    className="text-white"
+                                    size={30}
+                                  />
+
+                                </div>
+
+                              </div>
+
+                            ) : (
+
+                              <div className="border-4 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center aspect-[4/3] bg-slate-100/50 text-slate-400">
+
+                                <ShieldAlert
+                                  size={24}
+                                  className="mb-2 opacity-50"
+                                />
+
+                                <p className="text-[9px] font-black uppercase tracking-widest">
+                                  Document Missing
+                                </p>
+
+                              </div>
+
+                            )}
+
+                          </div>
+                        );
+                      }
+                    )}
+
+                  </div>
+
+                </div>
+
               </div>
+
             </div>
           )}
 
-          {phase === 'schedule' && (
+          {/* =================================================
+              SCHEDULE PHASE
+          ================================================= */}
+
+          {phase ===
+            'schedule' && (
+
             <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
+
               <div className="flex justify-between items-end">
+
                 <div>
-                  <h3 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">Assign Inspector</h3>
-                  <p className="text-slate-500 text-[10px] font-black uppercase mt-2">Audit Site: {vessel.barangay}</p>
+
+                  <h3 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">
+                    Assign Inspector
+                  </h3>
+
+                  <p className="text-slate-500 text-[10px] font-black uppercase mt-2">
+                    Audit Site: {
+                      vessel.barangay
+                    }
+                  </p>
+
                 </div>
-                
+
                 <div className="w-48">
-                  <Label htmlFor="audit-assignment-date" className="text-[10px] font-black uppercase text-blue-600">
+
+                  <Label
+                    htmlFor="audit-assignment-date"
+                    className="text-[10px] font-black uppercase text-blue-600"
+                  >
                     Audit Date
                   </Label>
-                  <input 
+
+                  <input
                     id="audit-assignment-date"
-                    type="date" 
-                    value={scheduledDate} 
-                    onChange={(e) => setScheduledDate(e.target.value)} 
-                    className="w-full h-12 mt-1 rounded-xl font-bold border px-4 border-slate-200 outline-none" 
+                    type="date"
+                    value={
+                      scheduledDate
+                    }
+                    onChange={(e) =>
+                      setScheduledDate(
+                        e.target.value
+                      )
+                    }
+                    className="w-full h-12 mt-1 rounded-xl font-bold border px-4 border-slate-200 outline-none"
                     title="Select scheduled audit date"
                   />
+
                 </div>
+
               </div>
 
+              {/* INSPECTORS */}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activePersonnel.map((ins: any) => {
-                  const targetIdNum = ins.idNumber || ins.id_number || "";
-                  const targetName = ins.name || ins.inspector_name || 'UNNAMED REGISTRY';
-                  const isSelected = assignedInspectorIdNumber === targetIdNum && targetIdNum !== "";
 
-                  return (
-                    <button 
-                      key={ins.id} 
-                      type="button"
-                      onClick={() => setAssignedInspectorIdNumber(targetIdNum)} 
-                      className={`p-6 rounded-[2rem] border-2 transition-all flex items-center justify-between text-left ${
-                        isSelected ? 'border-blue-600 bg-blue-50 shadow-lg' : 'border-slate-100 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={`h-12 w-12 rounded-2xl flex items-center justify-center ${
-                          isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100'
-                        }`}>
-                          <User size={24} />
-                        </div>
-                        <div>
-                          <p className="font-black text-sm uppercase italic text-slate-900 leading-tight">
-                            {targetName}
-                          </p>
-                          <div className="flex flex-col gap-0.5 mt-1">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase leading-none">
-                              {ins.position || ins.role || 'Fishery Inspector'}
-                            </p>
-                            {targetIdNum && (
-                              <span className="text-[8px] font-mono tracking-wider font-black text-slate-400 uppercase bg-slate-100 px-1 py-0.5 rounded w-fit mt-1">
-                                ID: {targetIdNum}
-                              </span>
-                            )}
+                {activePersonnel.map(
+                  (ins: any) => {
+
+                    const targetIdNum =
+                      ins.idNumber ||
+                      ins.id_number ||
+                      "";
+
+                    const targetName =
+                      ins.name ||
+                      ins.inspector_name ||
+                      'UNNAMED REGISTRY';
+
+                    const isSelected =
+                      assignedInspectorIdNumber ===
+                        targetIdNum &&
+                      targetIdNum !==
+                        "";
+
+                    return (
+
+                      <button
+                        key={ins.id}
+                        type="button"
+                        onClick={() =>
+                          setAssignedInspectorIdNumber(
+                            targetIdNum
+                          )
+                        }
+                        className={`p-6 rounded-[2rem] border-2 transition-all flex items-center justify-between text-left ${
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50 shadow-lg'
+                            : 'border-slate-100 bg-white'
+                        }`}
+                      >
+
+                        <div className="flex items-center gap-4">
+
+                          <div
+                            className={`h-12 w-12 rounded-2xl flex items-center justify-center ${
+                              isSelected
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-100'
+                            }`}
+                          >
+
+                            <User
+                              size={24}
+                            />
+
                           </div>
-                        </div>
-                      </div>
-                      {isSelected && <CheckCircle2 className="text-blue-600" size={24} />}
-                    </button>
-                  );
-                })}
 
-                {activePersonnel.length === 0 && (
+                          <div>
+
+                            <p className="font-black text-sm uppercase italic text-slate-900 leading-tight">
+                              {targetName}
+                            </p>
+
+                            <div className="flex flex-col gap-0.5 mt-1">
+
+                              <p className="text-[10px] font-bold text-slate-400 uppercase leading-none">
+                                {ins.position ||
+                                  ins.role ||
+                                  'Fishery Inspector'}
+                              </p>
+
+                              {targetIdNum && (
+
+                                <span className="text-[8px] font-mono tracking-wider font-black text-slate-400 uppercase bg-slate-100 px-1 py-0.5 rounded w-fit mt-1">
+                                  ID: {
+                                    targetIdNum
+                                  }
+                                </span>
+
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                        {isSelected && (
+
+                          <CheckCircle2
+                            className="text-blue-600"
+                            size={24}
+                          />
+
+                        )}
+
+                      </button>
+
+                    );
+                  }
+                )}
+
+                {activePersonnel.length ===
+                  0 && (
+
                   <div className="col-span-2 py-8 text-center text-xs font-bold text-slate-400 border border-dashed rounded-3xl">
                     No active verified inspectors found on file.
                   </div>
+
                 )}
+
               </div>
 
+              {/* SCHEDULE ACTIONS */}
+
               <div className="flex gap-4 pt-6">
-                <Button variant="ghost" onClick={() => setPhase('review')} className="h-16 px-10 rounded-2xl font-black text-xs uppercase italic tracking-tighter">
+
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    setPhase(
+                      'review'
+                    )
+                  }
+                  className="h-16 px-10 rounded-2xl font-black text-xs uppercase italic tracking-tighter"
+                >
                   Back to Audit
                 </Button>
-                <Button 
-                  onClick={handleFinalSchedule} 
-                  disabled={!assignedInspectorIdNumber} 
+
+                <Button
+                  onClick={
+                    handleFinalSchedule
+                  }
+                  disabled={
+                    !assignedInspectorIdNumber
+                  }
                   className="flex-1 h-16 bg-slate-900 text-white rounded-2xl font-black text-xs tracking-widest hover:bg-blue-600 shadow-xl uppercase"
                 >
-                  <CalendarClock className="mr-2" size={18} /> Confirm Assignment
+
+                  <CalendarClock
+                    className="mr-2"
+                    size={18}
+                  />
+
+                  Confirm Assignment
+
                 </Button>
+
               </div>
+
             </div>
           )}
 
-          {phase === 'reject' && (
+          {/* =================================================
+              REJECT PHASE
+          ================================================= */}
+
+          {phase ===
+            'reject' && (
+
             <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 bg-white p-8 rounded-[2.5rem] border border-red-100 shadow-xl">
+
               <div>
+
                 <div className="flex items-center gap-3 text-red-600 mb-2">
-                  <ShieldAlert size={28} />
-                  <h3 className="text-2xl font-black uppercase italic tracking-tight">Reject Application</h3>
+
+                  <ShieldAlert
+                    size={28}
+                  />
+
+                  <h3 className="text-2xl font-black uppercase italic tracking-tight">
+                    Reject Application
+                  </h3>
+
                 </div>
+
                 <p className="text-xs font-bold text-slate-400 uppercase">
                   Select the explicit non-compliance factor for ID #{vessel.id}
                 </p>
+
               </div>
 
               <div className="space-y-4">
+
                 <Label className="text-[10px] font-black uppercase text-slate-500">
                   Primary Rejection Category
                 </Label>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
                   {[
                     "Invalid Valid ID",
                     "Missing / Invalid Document Files",
                     "Wrong / Unreachable Contact Number"
-                  ].map((reason) => (
-                    <button
-                      key={reason}
-                      type="button"
-                      onClick={() => setRejectionReason(reason)}
-                      className={`p-4 rounded-2xl border-2 text-left font-black text-xs uppercase transition-all ${
-                        rejectionReason === reason
-                          ? 'border-red-600 bg-red-50 text-red-700'
-                          : 'border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-200'
-                      }`}
-                    >
-                      {reason}
-                    </button>
-                  ))}
+                  ].map(
+                    (reason) => (
+
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() =>
+                          setRejectionReason(
+                            reason
+                          )
+                        }
+                        className={`p-4 rounded-2xl border-2 text-left font-black text-xs uppercase transition-all ${
+                          rejectionReason ===
+                          reason
+                            ? 'border-red-600 bg-red-50 text-red-700'
+                            : 'border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-200'
+                        }`}
+                      >
+                        {reason}
+                      </button>
+
+                    )
+                  )}
+
                 </div>
 
+                {/* NOTES */}
+
                 <div className="space-y-2 pt-2">
-                  <Label htmlFor="rejection-notes" className="text-[10px] font-black uppercase text-slate-500">
+
+                  <Label
+                    htmlFor="rejection-notes"
+                    className="text-[10px] font-black uppercase text-slate-500"
+                  >
                     Detailed Explanation / Instructions for Applicant
                   </Label>
+
                   <textarea
                     id="rejection-notes"
-                    value={rejectionNotes}
-                    onChange={(e) => setRejectionNotes(e.target.value)}
+                    value={
+                      rejectionNotes
+                    }
+                    onChange={(e) =>
+                      setRejectionNotes(
+                        e.target.value
+                      )
+                    }
                     placeholder="Specify why the ID/Document/Number was flagged (e.g., Expiration date passed, blurriness, invalid phone digits)..."
                     className="w-full h-32 p-4 rounded-2xl border border-slate-200 bg-slate-50 text-xs font-medium focus:ring-2 focus:ring-red-500 focus:outline-none"
                   />
+
                 </div>
+
               </div>
 
+              {/* REJECTION BUTTONS */}
+
               <div className="flex gap-4 pt-4 border-t border-slate-100">
-                <Button 
-                  variant="ghost" 
-                  onClick={() => setPhase('review')} 
+
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    setPhase(
+                      'review'
+                    )
+                  }
                   className="h-14 px-8 rounded-2xl font-black text-xs uppercase italic tracking-tighter"
                 >
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleRejectSubmission} 
-                  disabled={isSubmittingRejection}
+
+                <Button
+                  onClick={
+                    handleRejectSubmission
+                  }
+                  disabled={
+                    isSubmittingRejection
+                  }
                   className="flex-1 h-14 bg-red-600 text-white hover:bg-red-700 rounded-2xl font-black text-xs tracking-wide uppercase"
                 >
-                  {isSubmittingRejection ? "Submitting..." : "Confirm Rejection"}
+
+                  {isSubmittingRejection
+                    ? "Submitting..."
+                    : "Confirm Rejection"}
+
                 </Button>
+
               </div>
+
             </div>
           )}
+
         </div>
+
       </div>
+
     </div>
   );
 }
