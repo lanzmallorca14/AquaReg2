@@ -13,7 +13,6 @@ import {
   ShieldAlert,
   MapPin,
   Activity,
-  AlertTriangle,
   RotateCcw,
   CheckCircle2,
   CreditCard
@@ -83,6 +82,18 @@ interface Vessel {
   permitNo?: string;
 
   permit?: any;
+
+  // ============================================================
+  // PERMIT DELETION
+  // ============================================================
+
+  permit_deleted?: boolean;
+  permitDeleted?: boolean;
+
+  is_permit_deleted?: boolean;
+
+  permit_deleted_at?: string;
+  permitDeletedAt?: string;
 }
 
 
@@ -90,15 +101,13 @@ interface Vessel {
 // CATEGORY NORMALIZATION
 // ============================================================
 //
-// IMPORTANT:
-// These values match AuditQueuePage:
+// AuditQueuePage categories:
 //
 // payao
 // balsa
 // gears
 // pangulong
 //
-// We also support alternate spellings.
 // ============================================================
 
 const getCategory = (vessel: Vessel): string => {
@@ -142,6 +151,7 @@ const getCategory = (vessel: Vessel): string => {
     return 'payao_balsa';
   }
 
+
   // ------------------------------------------------------------
   // FISHING GEAR
   // ------------------------------------------------------------
@@ -160,6 +170,7 @@ const getCategory = (vessel: Vessel): string => {
     return 'fishing_gear';
   }
 
+
   // ------------------------------------------------------------
   // PANGULONG
   // ------------------------------------------------------------
@@ -176,6 +187,7 @@ const getCategory = (vessel: Vessel): string => {
     return 'pangulong';
   }
 
+
   // ------------------------------------------------------------
   // NORMAL VESSEL
   // ------------------------------------------------------------
@@ -190,6 +202,7 @@ const getCategory = (vessel: Vessel): string => {
   ) {
     return 'vessel';
   }
+
 
   return category;
 };
@@ -230,19 +243,6 @@ const getCategoryLabel = (vessel: Vessel): string => {
 // ============================================================
 // STATUS NORMALIZATION
 // ============================================================
-//
-// AuditQueuePage creates:
-//
-// Pending
-// Passed
-// Scheduled
-// Rejected
-//
-// Homepage also supports:
-//
-// Approved
-// Flagged
-// ============================================================
 
 const getStatus = (vessel: Vessel): string => {
   return String(
@@ -254,16 +254,15 @@ const getStatus = (vessel: Vessel): string => {
 
 
 // ============================================================
-// SPECIAL APPROVED ASSET
+// SPECIAL PAYMENT / PERMIT ASSET
 // ============================================================
 //
-// ONLY:
+// ONLY these receive the payment/permit notice:
 //
 // Fishing Gear
 // Payao/Balsa
 // Pangulong
 //
-// can receive the payment/permit message.
 // ============================================================
 
 const isPaymentPermitAsset = (
@@ -283,10 +282,15 @@ const isPaymentPermitAsset = (
 // APPROVED STATUS
 // ============================================================
 //
-// AuditQueuePage uses "Passed"
-// Some other pages may use "Approved".
+// AuditQueuePage uses:
 //
-// BOTH are treated as approved.
+// Passed
+//
+// Other parts of the system may use:
+//
+// Approved
+//
+// Both are accepted.
 // ============================================================
 
 const isApprovedStatus = (
@@ -316,16 +320,79 @@ const isPaymentPermitReady = (
 
 
 // ============================================================
+// PERMIT DELETED
+// ============================================================
+
+const isPermitDeleted = (
+  vessel: Vessel
+): boolean => {
+
+  // ------------------------------------------------------------
+  // BOOLEAN DELETION FLAGS
+  // ------------------------------------------------------------
+
+  if (
+    vessel?.permit_deleted === true ||
+    vessel?.permitDeleted === true ||
+    vessel?.is_permit_deleted === true
+  ) {
+    return true;
+  }
+
+
+  // ------------------------------------------------------------
+  // DELETION DATE
+  // ------------------------------------------------------------
+
+  if (
+    vessel?.permit_deleted_at !== undefined &&
+    vessel?.permit_deleted_at !== null &&
+    String(
+      vessel.permit_deleted_at
+    ).trim() !== ''
+  ) {
+    return true;
+  }
+
+
+  if (
+    vessel?.permitDeletedAt !== undefined &&
+    vessel?.permitDeletedAt !== null &&
+    String(
+      vessel.permitDeletedAt
+    ).trim() !== ''
+  ) {
+    return true;
+  }
+
+
+  return false;
+};
+
+
+// ============================================================
 // PERMIT ALREADY SAVED
 // ============================================================
 //
-// If Permit Management saves a permit, the public notice
-// disappears.
+// If a permit exists OR has already been issued/saved,
+// the public payment notice disappears.
+//
+// A deleted permit also hides the notice when
+// Permit Management marks the record as deleted.
 // ============================================================
 
 const isPermitAlreadySaved = (
   vessel: Vessel
 ): boolean => {
+
+  // ------------------------------------------------------------
+  // DELETED PERMIT
+  // ------------------------------------------------------------
+
+  if (isPermitDeleted(vessel)) {
+    return true;
+  }
+
 
   // ------------------------------------------------------------
   // BOOLEAN FLAGS
@@ -349,7 +416,9 @@ const isPermitAlreadySaved = (
   if (
     vessel?.permit_id !== undefined &&
     vessel?.permit_id !== null &&
-    String(vessel.permit_id).trim() !== ''
+    String(
+      vessel.permit_id
+    ).trim() !== ''
   ) {
     return true;
   }
@@ -368,7 +437,9 @@ const isPermitAlreadySaved = (
   if (
     permitNumber !== undefined &&
     permitNumber !== null &&
-    String(permitNumber).trim() !== ''
+    String(
+      permitNumber
+    ).trim() !== ''
   ) {
     return true;
   }
@@ -505,17 +576,18 @@ export default function Homepage() {
     >('all');
 
 
-  const [reRegisterData, setReRegisterData] =
-    useState<Vessel | null>(null);
-
-
   // ============================================================
   // REGISTER
   // ============================================================
+  //
+  // IMPORTANT:
+  // This always starts a NEW registration.
+  //
+  // It does NOT load or reuse a rejected record.
+  //
+  // ============================================================
 
   const handleRegisterClick = () => {
-
-    setReRegisterData(null);
 
     localStorage.removeItem(
       'reRegisterVesselData'
@@ -523,30 +595,6 @@ export default function Homepage() {
 
     localStorage.removeItem(
       'isReRegistering'
-    );
-
-    setShowTermsModal(true);
-  };
-
-
-  // ============================================================
-  // REGISTER AGAIN
-  // ============================================================
-
-  const handleReRegister = (
-    vessel: Vessel
-  ) => {
-
-    setReRegisterData(vessel);
-
-    localStorage.setItem(
-      'reRegisterVesselData',
-      JSON.stringify(vessel)
-    );
-
-    localStorage.setItem(
-      'isReRegistering',
-      'true'
     );
 
     setShowTermsModal(true);
@@ -562,41 +610,22 @@ export default function Homepage() {
     setShowTermsModal(false);
 
 
-    if (reRegisterData) {
+    // ----------------------------------------------------------
+    // ALWAYS START A FRESH REGISTRATION
+    // ----------------------------------------------------------
 
-      navigate(
-        '/new-registration',
-        {
-          state: {
-            reRegisterVessel:
-              reRegisterData,
+    localStorage.removeItem(
+      'reRegisterVesselData'
+    );
 
-            isReAudit:
-              true,
+    localStorage.removeItem(
+      'isReRegistering'
+    );
 
-            existingId:
-              reRegisterData.id,
 
-            originalName:
-              reRegisterData.vessel_name
-          }
-        }
-      );
-
-    } else {
-
-      localStorage.removeItem(
-        'reRegisterVesselData'
-      );
-
-      localStorage.removeItem(
-        'isReRegistering'
-      );
-
-      navigate(
-        '/new-registration'
-      );
-    }
+    navigate(
+      '/new-registration'
+    );
   };
 
 
@@ -716,7 +745,7 @@ export default function Homepage() {
 
 
           // ------------------------------------------------------
-          // SPECIAL PAYMENT ASSET
+          // PAYMENT ASSET
           // ------------------------------------------------------
 
           const isSpecialPaymentAsset =
@@ -724,8 +753,7 @@ export default function Homepage() {
 
 
           // ------------------------------------------------------
-          // IF PERMIT IS ALREADY SAVED,
-          // REMOVE PAYMENT NOTICE.
+          // PERMIT SAVED OR DELETED
           // ------------------------------------------------------
 
           if (
@@ -976,7 +1004,6 @@ export default function Homepage() {
 
           <div className="flex-1 flex flex-col items-start text-left space-y-8 p-10 md:p-14 w-full max-w-2xl bg-white/10 backdrop-blur-3xl border border-white/25 rounded-[3rem] shadow-[0_30px_60px_rgba(0,0,0,0.4)]">
 
-
             <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-white/15 border border-white/30 rounded-full text-white backdrop-blur-md">
 
               <Anchor
@@ -1019,7 +1046,7 @@ export default function Homepage() {
                 }
                 className="flex items-center justify-center gap-3 px-8 py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-black uppercase tracking-widest text-sm transition-all shadow-lg active:scale-95 w-full sm:w-auto border border-white/20"
               >
-                REGISTER VESSEL -&gt;
+                REGISTER VESSEL 
               </button>
 
 
@@ -1043,7 +1070,6 @@ export default function Homepage() {
           ================================================== */}
 
           <div className="hidden lg:flex flex-col gap-6 w-80">
-
 
             {/* SCHEDULED */}
 
@@ -1222,7 +1248,7 @@ export default function Homepage() {
 
                   <div>
 
-                    <p className="text-[9px] font-black uppercase text-emerald-200 tracking-wider">
+                    <p className="text-[9] font-black uppercase text-emerald-200 tracking-wider">
                       Payment / Permit
                     </p>
 
@@ -1244,7 +1270,6 @@ export default function Homepage() {
             ================================================= */}
 
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-
 
               <div className="relative w-full md:max-w-md">
 
@@ -1475,7 +1500,6 @@ export default function Homepage() {
                             }`}
                           >
 
-
                             {/* ID */}
 
                             <td className="py-4 px-6 font-mono font-bold text-white/60 text-[11px] whitespace-nowrap">
@@ -1563,7 +1587,7 @@ export default function Homepage() {
 
                                   <span className="text-[9px] font-black uppercase text-red-400 tracking-wider flex items-center gap-1">
 
-                                    <AlertTriangle
+                                    <RotateCcw
                                       size={10}
                                     />
 
@@ -1735,11 +1759,16 @@ export default function Homepage() {
                                     vessel
                                   )}
 
-                                  {' • '}
+                                  {/* MOTOR STATUS ONLY FOR NORMAL VESSEL */}
 
-                                  {vessel.is_motorized
-                                    ? 'Motorized'
-                                    : 'Non-Motorized'}
+                                  {getCategory(vessel) === 'vessel' && (
+                                    <>
+                                      {' • '}
+                                      {vessel.is_motorized
+                                        ? 'Motorized'
+                                        : 'Non-Motorized'}
+                                    </>
+                                  )}
 
                                 </span>
 
@@ -1755,23 +1784,25 @@ export default function Homepage() {
 
                               {isRejected ? (
 
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleReRegister(
-                                      vessel
-                                    )
-                                  }
-                                  className="inline-flex items-center gap-1.5 py-2 px-4 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md active:scale-95 border border-white/20"
-                                >
+                                /*
+                                 * IMPORTANT:
+                                 *
+                                 * There is NO Register Again button.
+                                 *
+                                 * The rejected record remains as history.
+                                 * The client can use the main REGISTER VESSEL
+                                 * button to create a completely new application.
+                                 */
+
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-red-300 uppercase tracking-wider">
 
                                   <RotateCcw
                                     size={12}
                                   />
 
-                                  Register Again
+                                  REGISTERED AGAIN — NEW APPLICATION
 
-                                </button>
+                                </span>
 
 
                               ) : isSpecialPaymentAsset ? (
@@ -1802,7 +1833,6 @@ export default function Homepage() {
                           </tr>
 
                         );
-
                       }
                     )}
 
@@ -1930,9 +1960,7 @@ export default function Homepage() {
 
                 <h3 className="text-xl font-black tracking-wide">
 
-                  {reRegisterData
-                    ? 'Re-Audit Terms & Guidelines'
-                    : 'Terms & Privacy Policy'}
+                  Terms & Privacy Policy
 
                 </h3>
 
@@ -1957,39 +1985,6 @@ export default function Homepage() {
 
 
             <div className="my-6 overflow-y-auto space-y-4 pr-2 text-sm text-white/80 leading-relaxed">
-
-
-              {reRegisterData && (
-
-                <div className="p-4 bg-red-900/40 border border-red-500/30 rounded-2xl mb-4">
-
-                  <p className="text-xs font-bold text-red-200">
-
-                    <span className="font-black uppercase text-red-400 block mb-1">
-
-                      Re-Audit Notice for Reg ID #
-                      {reRegisterData.id}:
-
-                    </span>
-
-                    You are re-submitting an application for{' '}
-
-                    <strong className="text-white uppercase">
-
-                      {getDisplayName(
-                        reRegisterData
-                      )}
-
-                    </strong>
-
-                    . Updating information will modify or
-                    replace the existing record in the database.
-
-                  </p>
-
-                </div>
-
-              )}
 
 
               <h4 className="font-bold text-white text-base">
@@ -2050,10 +2045,11 @@ export default function Homepage() {
 
               <p>
                 If your vessel registration is flagged or rejected,
-                you are permitted to resubmit corrective documents
-                or details via the Re-Audit portal. Prior submissions
-                will be archived, and updated details will replace
-                prior records upon approval.
+                you may submit a new registration application with
+                corrected documents or details. The previous
+                rejected application remains in the audit history,
+                while the new application receives its own
+                registration record and proceeds independently.
               </p>
 
 
@@ -2108,15 +2104,7 @@ export default function Homepage() {
                 className="w-full sm:w-auto px-8 py-3 rounded-full font-black uppercase text-xs tracking-wider bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-lg border border-white/30 flex items-center justify-center gap-2"
               >
 
-                {reRegisterData && (
-                  <RotateCcw
-                    size={14}
-                  />
-                )}
-
-                {reRegisterData
-                  ? 'Proceed to Re-Register'
-                  : 'I Agree & Proceed'}
+                I Agree & Proceed
 
               </button>
 
@@ -2131,3 +2119,4 @@ export default function Homepage() {
     </div>
   );
 }
+

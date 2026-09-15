@@ -1,4 +1,10 @@
-import { useState, useMemo, type ReactNode } from 'react';
+import {
+  useState,
+  useMemo,
+  useEffect,
+  type ReactNode,
+} from 'react';
+
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -22,195 +28,774 @@ import {
   LifeBuoy,
   Phone,
   XCircle,
-  Trash2
+  Trash2,
+  Bell,
 } from 'lucide-react';
 
 import { useAquaData } from '../../components/context/AquaRegCONTEXT';
 import { supabase } from '../../../supabaseClient';
 
-export default function AuditQueuePage() {
+/* =========================================================
+   TYPES
+========================================================= */
+
+type AuditPhase = 'review' | 'schedule' | 'reject';
+
+interface AuditQueuePageProps {}
+
+interface RejectionNotice {
+  id: string | number;
+  original_vessel_id?: string | number | null;
+  owner_name?: string | null;
+  vessel_name?: string | null;
+  asset_category?: string | null;
+  barangay?: string | null;
+  rejection_reason?: string | null;
+  rejection_notes?: string | null;
+  rejected_at?: string | null;
+  updated_at?: string | null;
+}
+
+/* =========================================================
+   CATEGORY HELPERS
+
+   ALL CATEGORIES USE THE SAME ID / REJECTION LOGIC.
+
+   Supported:
+   - VESSEL
+   - FISHING GEAR
+   - PAYAO/BALSA
+   - PANGULONG
+========================================================= */
+
+const VESSEL_CATEGORIES = [
+  'vessel',
+  'boat',
+  'fishing vessel',
+];
+
+const PAYAO_CATEGORIES = [
+  'payao',
+  'balsa',
+  'payao/balsa',
+  'payao balsa',
+];
+
+const FISHING_GEAR_CATEGORIES = [
+  'gear',
+  'gears',
+  'fishing gear',
+  'fishinggear',
+];
+
+const PANGULONG_CATEGORIES = [
+  'pangulong',
+  'pangulong gear',
+  'pangulong (ring net)',
+  'ring net',
+  'ringnet',
+];
+
+const normalizeCategoryValue = (value: any): string => {
+  return String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[_-]/g, ' ')
+    .replace(/\s+/g, ' ');
+};
+
+const normalizeCategory = (vessel: any): string => {
+  return normalizeCategoryValue(
+    vessel?.asset_category ||
+      vessel?.type ||
+      vessel?.category ||
+      ''
+  );
+};
+
+const isVesselCategory = (vessel: any): boolean => {
+  return VESSEL_CATEGORIES.includes(
+    normalizeCategory(vessel)
+  );
+};
+
+const isPayaoCategory = (vessel: any): boolean => {
+  return PAYAO_CATEGORIES.includes(
+    normalizeCategory(vessel)
+  );
+};
+
+const isFishingGearCategory = (vessel: any): boolean => {
+  return FISHING_GEAR_CATEGORIES.includes(
+    normalizeCategory(vessel)
+  );
+};
+
+const isPangulongCategory = (vessel: any): boolean => {
+  return PANGULONG_CATEGORIES.includes(
+    normalizeCategory(vessel)
+  );
+};
+
+const isGearCategory = (vessel: any): boolean => {
+  const category = normalizeCategory(vessel);
+
+  return (
+    PAYAO_CATEGORIES.includes(category) ||
+    FISHING_GEAR_CATEGORIES.includes(category) ||
+    PANGULONG_CATEGORIES.includes(category)
+  );
+};
+
+const getCategoryLabel = (vessel: any): string => {
+  if (isPayaoCategory(vessel)) {
+    return 'PAYAO/BALSA';
+  }
+
+  if (isPangulongCategory(vessel)) {
+    return 'PANGULONG';
+  }
+
+  if (isFishingGearCategory(vessel)) {
+    return 'FISHING GEAR';
+  }
+
+  if (isVesselCategory(vessel)) {
+    return 'VESSEL';
+  }
+
+  return (
+    normalizeCategory(vessel).toUpperCase() ||
+    'GENERAL'
+  );
+};
+
+/* =========================================================
+   DISPLAY NAME
+========================================================= */
+
+const getAssetDisplayName = (vessel: any): string => {
+  const candidates = [
+    vessel?.vessel_name,
+    vessel?.name,
+    vessel?.boat_name,
+    vessel?.registered_vessel_name,
+    vessel?.vesselName,
+  ];
+
+  const validName = candidates.find(
+    (name) =>
+      typeof name === 'string' &&
+      name.trim().length > 0
+  );
+
+  if (validName) {
+    return validName.trim();
+  }
+
+  if (isPayaoCategory(vessel)) {
+    return (
+      vessel?.payao_vessel_name ||
+      vessel?.parent_vessel_name ||
+      'UNNAMED PAYAO/BALSA'
+    );
+  }
+
+  if (isPangulongCategory(vessel)) {
+    return (
+      vessel?.gear_type ||
+      'UNNAMED PANGULONG'
+    );
+  }
+
+  if (isFishingGearCategory(vessel)) {
+    return (
+      vessel?.gear_type ||
+      'UNNAMED FISHING GEAR'
+    );
+  }
+
+  if (isVesselCategory(vessel)) {
+    return 'UNNAMED VESSEL';
+  }
+
+  return 'UNNAMED ASSET';
+};
+
+/* =========================================================
+   SEARCH
+========================================================= */
+
+const matchesSearch = (
+  vessel: any,
+  query: string
+): boolean => {
+  if (!query) {
+    return true;
+  }
+
+  const searchableValues = [
+    vessel?.id,
+    vessel?.owner_name,
+    vessel?.owner,
+    vessel?.vessel_name,
+    vessel?.name,
+    vessel?.boat_name,
+    vessel?.registered_vessel_name,
+    vessel?.vesselName,
+    vessel?.gear_type,
+    vessel?.asset_category,
+    vessel?.type,
+    vessel?.category,
+    vessel?.barangay,
+    vessel?.sitio,
+  ];
+
+  return searchableValues.some((value) =>
+    String(value || '')
+      .toLowerCase()
+      .includes(query)
+  );
+};
+
+/* =========================================================
+   OWNER NAME COMPARISON
+========================================================= */
+
+/**
+ * Normalizes owner names before comparison so harmless formatting
+ * differences do not prevent a match.
+ *
+ * Examples:
+ * "Juan Dela Cruz" == "JUAN  DELA-CRUZ"
+ * "Maria, Santos" == "Maria Santos"
+ */
+const normalizeOwnerName = (value: any): string => {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+/* =========================================================
+   DETAIL ITEM
+========================================================= */
+
+function DetailItem({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: any;
+  icon?: ReactNode;
+}) {
+  return (
+    <div>
+      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+        {icon}
+        {label}
+      </p>
+
+      <p className="text-xs font-black text-slate-900 uppercase mt-0.5">
+        {value || 'N/A'}
+      </p>
+    </div>
+  );
+}
+
+/* =========================================================
+   MAIN PAGE
+========================================================= */
+
+export default function AuditQueuePage(
+  _props: AuditQueuePageProps
+) {
   const {
     Vessels = [],
     loading,
-    deleteVessel
+    deleteVessel,
   } = useAquaData();
 
   const [searchQuery, setSearchQuery] =
-    useState("");
+    useState('');
 
   const [selectedVessel, setSelectedVessel] =
     useState<any | null>(null);
 
-  /* =========================================================
-     DELETE AUDIT RECORD
-  ========================================================= */
+  const [rejectionNotices, setRejectionNotices] =
+    useState<RejectionNotice[]>([]);
 
-  const handleDeleteAuditRecord = async (
-    vessel: any
-  ) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to permanently delete this audit application?\n\n` +
-      `ID: ${vessel.id}\n` +
-      `Owner: ${
-        vessel.owner_name ||
-        vessel.owner ||
-        'N/A'
-      }\n\n` +
-      `This action cannot be undone.`
-    );
+  const [loadingNotices, setLoadingNotices] =
+    useState(true);
 
-    if (!confirmed) return;
+  /* =======================================================
+     LOAD REJECTION NOTICES
+  ======================================================= */
 
+  const loadRejectionNotices = async () => {
     try {
-      if (
-        typeof deleteVessel !==
-        'function'
-      ) {
-        throw new Error(
-          'Delete function is not available in AquaRegCONTEXT.'
-        );
+      setLoadingNotices(true);
+
+      const { data, error } = await supabase
+        .from('RejectionNotices')
+        .select('*')
+        .order('rejected_at', {
+          ascending: false,
+        });
+
+      if (error) {
+        throw error;
       }
 
-      await deleteVessel(
-        vessel.id
-      );
-
-      setSelectedVessel(null);
-
-      toast.success(
-        'Audit application deleted',
-        {
-          description:
-            `Application ${vessel.id} was permanently removed.`
-        }
+      setRejectionNotices(
+        (data || []) as RejectionNotice[]
       );
     } catch (error: any) {
       console.error(
-        'Audit deletion error:',
+        'Loading rejection notices failed:',
         error
       );
 
       toast.error(
-        'Deletion failed',
+        'Unable to load rejection notices',
         {
           description:
             error?.message ||
-            'Unable to permanently delete this application.'
+            'Check the RejectionNotices table.',
         }
       );
+    } finally {
+      setLoadingNotices(false);
     }
   };
 
-  /* =========================================================
-     AUDIT QUEUE
-  ========================================================= */
+  useEffect(() => {
+    loadRejectionNotices();
+  }, []);
+
+  /* =======================================================
+     PENDING QUEUE
+
+     Only Pending records are shown here.
+  ======================================================= */
 
   const queue = useMemo(() => {
-    return Vessels.filter(
-      (v: any) => {
-        const isPending =
-          String(
-            v?.status || ''
-          ).toLowerCase() ===
-          'pending';
+    const query = searchQuery
+      .toLowerCase()
+      .trim();
 
-        if (!isPending) {
-          return false;
+    return Vessels.filter((v: any) => {
+      const status = String(
+        v?.status || ''
+      )
+        .toLowerCase()
+        .trim();
+
+      return (
+        status === 'pending' &&
+        matchesSearch(v, query)
+      );
+    });
+  }, [Vessels, searchQuery]);
+
+  /* =======================================================
+     FILTERED REJECTION NOTICES
+  ======================================================= */
+
+  const filteredRejectionNotices =
+    useMemo(() => {
+      const query = searchQuery
+        .toLowerCase()
+        .trim();
+
+      if (!query) {
+        return rejectionNotices;
+      }
+
+      return rejectionNotices.filter(
+        (notice) => {
+          const values = [
+            notice.id,
+            notice.original_vessel_id,
+            notice.owner_name,
+            notice.vessel_name,
+            notice.asset_category,
+            notice.barangay,
+            notice.rejection_reason,
+            notice.rejection_notes,
+          ];
+
+          return values.some((value) =>
+            String(value || '')
+              .toLowerCase()
+              .includes(query)
+          );
+        }
+      );
+    }, [
+      rejectionNotices,
+      searchQuery,
+    ]);
+
+  /* =======================================================
+     OWNER NAME MATCH NOTICE
+
+     Compare the owner name in:
+       Applications Awaiting Audit
+     against:
+       Rejection Notices
+
+     A match means this owner has a previous rejection notice.
+     The application itself is NOT blocked or changed automatically.
+  ======================================================= */
+
+  const rejectedOwnerNames = useMemo(() => {
+    const names = new Set<string>();
+
+    rejectionNotices.forEach((notice) => {
+      const normalized = normalizeOwnerName(
+        notice.owner_name
+      );
+
+      if (normalized) {
+        names.add(normalized);
+      }
+    });
+
+    return names;
+  }, [rejectionNotices]);
+
+  const getOwnerRejectionMatch = (
+    vessel: any
+  ): RejectionNotice | null => {
+    const ownerName = normalizeOwnerName(
+      vessel?.owner_name || vessel?.owner
+    );
+
+    if (!ownerName) {
+      return null;
+    }
+
+    const exactNotice =
+      rejectionNotices.find(
+        (notice) =>
+          normalizeOwnerName(
+            notice.owner_name
+          ) === ownerName
+      ) || null;
+
+    return exactNotice;
+  };
+
+  const ownerHasPreviousRejection = (
+    vessel: any
+  ): boolean => {
+    const ownerName = normalizeOwnerName(
+      vessel?.owner_name || vessel?.owner
+    );
+
+    return (
+      ownerName.length > 0 &&
+      rejectedOwnerNames.has(ownerName)
+    );
+  };
+
+  /* =======================================================
+     DELETE REJECTION NOTICE + ORIGINAL APPLICATION
+
+     Deleting a rejection notice permanently removes:
+
+     1. RejectionNotices row
+     2. Original Vessels row
+
+     This makes the registration ID available for a
+     completely new future registration.
+  ======================================================= */
+
+  const handleDeleteRejectionNotice =
+    async (
+      notice: RejectionNotice
+    ) => {
+      const originalId =
+        notice.original_vessel_id;
+
+      const confirmed =
+        window.confirm(
+          `PERMANENT DELETION\n\n` +
+          `Are you sure you want to permanently delete this rejection record?\n\n` +
+          `Notice ID: ${notice.id}\n` +
+          `Original Application ID: ${
+            originalId || 'N/A'
+          }\n` +
+          `Owner: ${
+            notice.owner_name || 'N/A'
+          }\n` +
+          `Category: ${
+            notice.asset_category || 'GENERAL'
+          }\n\n` +
+          `This will permanently remove BOTH:\n` +
+          `• The Rejection Notice\n` +
+          `• The original Audit/Vessels application\n\n` +
+          `The application ID will then become available for a future client.\n\n` +
+          `THIS ACTION CANNOT BE UNDONE.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        if (!originalId) {
+          throw new Error(
+            'This rejection notice does not contain original_vessel_id. The original application cannot be safely identified.'
+          );
         }
 
-        const query =
-          searchQuery
-            .toLowerCase()
-            .trim();
+        /* =================================================
+           STEP 1
+           Verify original application exists.
+        ================================================= */
 
-        if (!query) {
-          return true;
-        }
-
-        return (
-          v.owner_name
-            ?.toLowerCase()
-            .includes(query) ||
-
-          v.vessel_name
-            ?.toLowerCase()
-            .includes(query) ||
-
-          v.gear_type
-            ?.toLowerCase()
-            .includes(query) ||
-
-          String(
-            v.id || ''
+        const {
+          data: originalApplication,
+          error: lookupError,
+        } = await supabase
+          .from('Vessels')
+          .select('id')
+          .eq(
+            'id',
+            originalId
           )
-            .toLowerCase()
-            .includes(query) ||
+          .maybeSingle();
 
-          v.barangay
-            ?.toLowerCase()
-            .includes(query)
+        if (lookupError) {
+          throw lookupError;
+        }
+
+        /* =================================================
+           STEP 2
+           Permanently delete original application.
+        ================================================= */
+
+        if (originalApplication) {
+          if (
+            typeof deleteVessel ===
+            'function'
+          ) {
+            await deleteVessel(
+              String(originalId)
+            );
+          } else {
+            const {
+              error: vesselDeleteError,
+            } = await supabase
+              .from('Vessels')
+              .delete()
+              .eq(
+                'id',
+                originalId
+              );
+
+            if (vesselDeleteError) {
+              throw vesselDeleteError;
+            }
+          }
+        }
+
+        /* =================================================
+           STEP 3
+           Permanently delete rejection notice.
+        ================================================= */
+
+        const {
+          error: noticeDeleteError,
+        } = await supabase
+          .from('RejectionNotices')
+          .delete()
+          .eq(
+            'id',
+            notice.id
+          );
+
+        if (noticeDeleteError) {
+          throw noticeDeleteError;
+        }
+
+        /* =================================================
+           STEP 4
+           Remove notice from local state.
+        ================================================= */
+
+        setRejectionNotices(
+          (current) =>
+            current.filter(
+              (item) =>
+                String(item.id) !==
+                String(notice.id)
+            )
+        );
+
+        /* =================================================
+           STEP 5
+           Close popup if necessary.
+        ================================================= */
+
+        if (
+          selectedVessel &&
+          String(selectedVessel.id) ===
+            String(originalId)
+        ) {
+          setSelectedVessel(null);
+        }
+
+        toast.success(
+          'Rejection permanently deleted',
+          {
+            description:
+              `Application ${originalId} and its rejection notice were permanently removed. The ID is now available for a future registration.`,
+          }
+        );
+
+        await loadRejectionNotices();
+      } catch (error: any) {
+        console.error(
+          'Permanent rejection deletion error:',
+          error
+        );
+
+        toast.error(
+          'Permanent deletion failed',
+          {
+            description:
+              error?.message ||
+              'The rejection record could not be completely deleted.',
+          }
         );
       }
-    );
-  }, [
-    Vessels,
-    searchQuery
-  ]);
+    };
 
-  /* =========================================================
+  /* =======================================================
+     MANUAL DELETE OF PENDING / AUDIT APPLICATION
+  ======================================================= */
+
+  const handleDeleteAuditRecord =
+    async (vessel: any) => {
+      const confirmed =
+        window.confirm(
+          `Are you sure you want to permanently delete this audit application?\n\n` +
+          `ID: ${vessel.id}\n` +
+          `Owner: ${
+            vessel.owner_name ||
+            vessel.owner ||
+            'N/A'
+          }\n` +
+          `Category: ${getCategoryLabel(
+            vessel
+          )}\n\n` +
+          `This action cannot be undone.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        if (
+          typeof deleteVessel !==
+          'function'
+        ) {
+          throw new Error(
+            'Delete function is not available in AquaRegCONTEXT.'
+          );
+        }
+
+        await deleteVessel(
+          vessel.id
+        );
+
+        setSelectedVessel(null);
+
+        toast.success(
+          'Audit application deleted',
+          {
+            description:
+              `Application ${vessel.id} was permanently removed. Its registration ID is now available for reuse.`,
+          }
+        );
+      } catch (error: any) {
+        console.error(
+          'Audit deletion error:',
+          error
+        );
+
+        toast.error(
+          'Deletion failed',
+          {
+            description:
+              error?.message ||
+              'Unable to permanently delete this application.',
+          }
+        );
+      }
+    };
+
+  /* =======================================================
      LOADING
-  ========================================================= */
+  ======================================================= */
 
-  if (loading) {
+  if (
+    loading ||
+    loadingNotices
+  ) {
     return (
       <div className="p-6 font-sans bg-slate-50 min-h-screen flex flex-col items-center justify-center">
-
         <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
 
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
           Loading Cloud Audit Queue...
         </p>
-
       </div>
     );
   }
 
-  /* =========================================================
+  /* =======================================================
      PAGE
-  ========================================================= */
+  ======================================================= */
 
   return (
     <div className="relative space-y-6 animate-in fade-in duration-700 font-sans p-6 pt-10 bg-slate-50/30 min-h-screen">
 
-      {/* =====================================================
-          PAGE HEADER
-      ===================================================== */}
+      {/* =================================================
+          HEADER
+      ================================================= */}
 
       <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col lg:flex-row justify-between items-center gap-4">
 
         <div className="flex items-center gap-4 w-full lg:w-auto">
 
           <div className="bg-slate-900 p-3 rounded-2xl shadow-lg shadow-slate-200">
-
             <Ship
               className="text-emerald-400"
               size={20}
             />
-
           </div>
 
           <div>
-
             <h1 className="text-xl font-black uppercase tracking-tighter text-slate-900 leading-none italic">
               Registration Audit
             </h1>
 
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
               {queue.length} Total Pending Review
+              {' • '}
+              {filteredRejectionNotices.length}{' '}
+              Rejection Notices
             </p>
-
           </div>
-
         </div>
 
         {/* SEARCH */}
@@ -224,7 +809,7 @@ export default function AuditQueuePage() {
 
           <Input
             className="pl-10 h-12 rounded-xl border-slate-100 bg-slate-50/50 text-xs font-bold"
-            placeholder="Search name, ID, or barangay..."
+            placeholder="Search ID, name, barangay, category..."
             value={searchQuery}
             onChange={(e) =>
               setSearchQuery(
@@ -232,23 +817,32 @@ export default function AuditQueuePage() {
               )
             }
           />
-
         </div>
-
       </div>
 
-      {/* =====================================================
-          MAIN TABLE
-      ===================================================== */}
+      {/* =================================================
+          PENDING APPLICATIONS
+      ================================================= */}
 
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
 
+        <div className="px-8 py-5 bg-slate-900 flex items-center gap-3">
+
+          <FileCheck
+            size={17}
+            className="text-emerald-400"
+          />
+
+          <p className="text-[10px] font-black text-white uppercase tracking-widest">
+            Applications Awaiting Audit
+          </p>
+        </div>
+
         <div className="overflow-x-auto">
 
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="w-full text-left border-collapse min-w-[850px]">
 
             <thead>
-
               <tr className="bg-slate-50/50 border-b border-slate-100">
 
                 <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -268,20 +862,17 @@ export default function AuditQueuePage() {
                 </th>
 
               </tr>
-
             </thead>
 
             <tbody className="divide-y divide-slate-50">
 
               {queue.map(
                 (v: any) => {
+                  const matchingRejection =
+                    getOwnerRejectionMatch(v);
 
-                  const normalizedCategory =
-                    (
-                      v.asset_category ||
-                      v.type ||
-                      ''
-                    ).toLowerCase();
+                  const hasPreviousRejection =
+                    ownerHasPreviousRejection(v);
 
                   return (
                     <tr
@@ -289,9 +880,7 @@ export default function AuditQueuePage() {
                       className="group hover:bg-slate-50/80 transition-all"
                     >
 
-                      {/* =================================================
-                          ASSET DETAILS
-                      ================================================= */}
+                      {/* ASSET */}
 
                       <td className="px-8 py-6">
 
@@ -299,22 +888,24 @@ export default function AuditQueuePage() {
 
                           <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-emerald-400 transition-all">
 
-                            {normalizedCategory ===
-                              'vessel' && (
+                            {isVesselCategory(
+                              v
+                            ) && (
                               <Ship size={20} />
                             )}
 
-                            {normalizedCategory ===
-                              'payao' && (
+                            {isPayaoCategory(
+                              v
+                            ) && (
                               <Anchor size={20} />
                             )}
 
-                            {[
-                              'gears',
-                              'pangulong'
-                            ].includes(
-                              normalizedCategory
-                            ) && (
+                            {(isFishingGearCategory(
+                              v
+                            ) ||
+                              isPangulongCategory(
+                                v
+                              )) && (
                               <LifeBuoy size={20} />
                             )}
 
@@ -322,42 +913,10 @@ export default function AuditQueuePage() {
 
                           <div>
 
-                            {/* =================================================
-                                FIXED VESSEL NAME DISPLAY
-
-                                Motorized vessels prioritize vessel_name.
-                            ================================================= */}
-
                             <div className="font-black italic text-slate-900 uppercase tracking-tight">
-
-                              {normalizedCategory ===
-                                'payao' ||
-                              normalizedCategory ===
-                                'balsa'
-                                ? (
-                                    v.vessel_name ||
-                                    v.parent_vessel_name ||
-                                    v.boat_owner_vessel_name ||
-                                    v.boat_name ||
-                                    'UNNAMED ASSET'
-                                  )
-                                : normalizedCategory ===
-                                  'vessel'
-                                ? (
-                                    v.vessel_name ||
-                                    v.name ||
-                                    v.boat_name ||
-                                    v.registered_vessel_name ||
-                                    v.vesselName ||
-                                    'UNNAMED VESSEL'
-                                  )
-                                : (
-                                    v.vessel_name ||
-                                    v.gear_type ||
-                                    v.boat_name ||
-                                    'UNNAMED ASSET'
-                                  )}
-
+                              {getAssetDisplayName(
+                                v
+                              )}
                             </div>
 
                             <div className="text-[9px] font-mono font-bold text-slate-400 uppercase">
@@ -372,12 +931,34 @@ export default function AuditQueuePage() {
 
                       {/* OWNER */}
 
-                      <td className="px-8 py-6 text-xs font-black text-slate-700 uppercase italic">
+                      <td className="px-8 py-6">
+                        <div className="text-xs font-black text-slate-700 uppercase italic">
+                          {v.owner_name ||
+                            v.owner ||
+                            'N/A'}
+                        </div>
 
-                        {v.owner_name ||
-                          v.owner ||
-                          'N/A'}
+                        {hasPreviousRejection && (
+                          <div className="mt-2 inline-flex max-w-[320px] items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left">
+                            <ShieldAlert
+                              size={13}
+                              className="mt-0.5 shrink-0 text-amber-600"
+                            />
 
+                            <div>
+                              <p className="text-[9px] font-black uppercase tracking-wider text-amber-700">
+                                Previous Rejection Notice
+                              </p>
+
+                              <p className="mt-0.5 text-[8px] font-bold uppercase leading-relaxed text-amber-600">
+                                This owner name matches a name in Rejection Notices.
+                                {matchingRejection?.original_vessel_id
+                                  ? ` Previous ID: ${matchingRejection.original_vessel_id}.`
+                                  : ''}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </td>
 
                       {/* CATEGORY */}
@@ -385,24 +966,7 @@ export default function AuditQueuePage() {
                       <td className="px-8 py-6 text-center">
 
                         <Badge className="bg-blue-100 text-blue-600 border-none rounded-md text-[9px] font-black uppercase px-3">
-
-                          {[
-                            'payao',
-                            'balsa'
-                          ].includes(
-                            (
-                              v.asset_category ||
-                              v.type ||
-                              ''
-                            ).toLowerCase()
-                          )
-                            ? 'PAYAO/BALSA'
-                            : (
-                                v.asset_category ||
-                                v.type ||
-                                'GENERAL'
-                              ).toUpperCase()}
-
+                          {getCategoryLabel(v)}
                         </Badge>
 
                       </td>
@@ -412,8 +976,6 @@ export default function AuditQueuePage() {
                       <td className="px-8 py-6">
 
                         <div className="flex items-center justify-end gap-2">
-
-                          {/* START AUDIT */}
 
                           <Button
                             onClick={() =>
@@ -427,10 +989,7 @@ export default function AuditQueuePage() {
                               size={14}
                               className="ml-2"
                             />
-
                           </Button>
-
-                          {/* DELETE */}
 
                           <Button
                             type="button"
@@ -444,11 +1003,7 @@ export default function AuditQueuePage() {
                             title="Delete Audit Application"
                             aria-label={`Delete audit application ${v.id}`}
                           >
-
-                            <Trash2
-                              size={16}
-                            />
-
+                            <Trash2 size={16} />
                           </Button>
 
                         </div>
@@ -462,12 +1017,299 @@ export default function AuditQueuePage() {
 
               {queue.length === 0 && (
                 <tr>
-
                   <td
                     colSpan={4}
                     className="px-8 py-12 text-center text-[10px] font-black text-slate-300 uppercase tracking-widest"
                   >
                     No items awaiting review inside this queue.
+                  </td>
+                </tr>
+              )}
+
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* =================================================
+          REJECTION NOTICES
+
+          Rejected applications are represented here.
+
+          AUDIT AGAIN:
+          Rejected -> Pending -> Audit Queue
+
+          DELETE:
+          Rejected -> permanently deleted
+      ================================================= */}
+
+      <div className="bg-white rounded-[2.5rem] border border-red-100 shadow-xl overflow-hidden">
+
+        <div className="px-8 py-5 bg-red-50 border-b border-red-100 flex items-center justify-between">
+
+          <div className="flex items-center gap-3">
+
+            <Bell
+              size={17}
+              className="text-red-600"
+            />
+
+            <div>
+
+              <p className="text-[10px] font-black text-red-700 uppercase tracking-widest">
+                Rejection Notices
+              </p>
+
+              <p className="text-[9px] font-bold text-red-400 uppercase mt-1">
+                Owner names are checked against previous rejection notices
+              </p>
+
+            </div>
+
+          </div>
+
+          <Badge className="bg-red-100 text-red-600 border-none text-[9px] font-black">
+            {filteredRejectionNotices.length}
+          </Badge>
+
+        </div>
+
+        <div className="overflow-x-auto">
+
+          <table className="w-full text-left border-collapse min-w-[1250px]">
+
+            <thead>
+
+              <tr className="bg-slate-50 border-b border-slate-100">
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Application
+                </th>
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Owner
+                </th>
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Category
+                </th>
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Rejection Notice
+                </th>
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Date
+                </th>
+
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">
+                  Action
+                </th>
+
+              </tr>
+
+            </thead>
+
+            <tbody className="divide-y divide-slate-50">
+
+              {filteredRejectionNotices.map(
+                (notice) => {
+
+                  return (
+                    <tr
+                      key={String(
+                        notice.id
+                      )}
+                      className="hover:bg-red-50/30 transition-all"
+                    >
+
+                      {/* APPLICATION */}
+
+                      <td className="px-8 py-6">
+
+                        <div className="flex items-center gap-4">
+
+                          <div className="h-11 w-11 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center">
+
+                            <XCircle
+                              size={19}
+                            />
+
+                          </div>
+
+                          <div>
+
+                            <p className="font-black italic uppercase text-slate-900">
+
+                              {notice.vessel_name ||
+                                'REJECTED APPLICATION'}
+
+                            </p>
+
+                            <p className="text-[9px] font-mono font-bold text-red-500 uppercase">
+
+                              ID:{' '}
+                              {notice.original_vessel_id ||
+                                'N/A'}
+
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                      </td>
+
+                      {/* OWNER */}
+
+                      <td className="px-8 py-6">
+
+                        <p className="text-xs font-black uppercase italic text-slate-700">
+                          {notice.owner_name ||
+                            'N/A'}
+                        </p>
+
+                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
+
+                          <MapPin
+                            size={10}
+                            className="inline mr-1"
+                          />
+
+                          {notice.barangay ||
+                            'N/A'}
+
+                        </p>
+
+                      </td>
+
+                      {/* CATEGORY */}
+
+                      <td className="px-8 py-6">
+
+                        <Badge className="bg-red-100 text-red-700 border-none rounded-md text-[9px] font-black uppercase px-3">
+
+                          {getCategoryLabel({
+                            asset_category:
+                              notice.asset_category,
+                          })}
+
+                        </Badge>
+
+                      </td>
+
+                      {/* NOTICE */}
+
+                      <td className="px-8 py-6 max-w-md">
+
+                        <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
+
+                          <div className="flex items-center gap-2 mb-2">
+
+                            <ShieldAlert
+                              size={14}
+                              className="text-red-600"
+                            />
+
+                            <span className="text-[9px] font-black text-red-600 uppercase tracking-widest">
+                              Rejected
+                            </span>
+
+                          </div>
+
+                          <p className="text-[11px] font-black text-slate-800 uppercase">
+                            {notice.rejection_reason ||
+                              'Application rejected.'}
+                          </p>
+
+                          {notice.rejection_notes && (
+                            <p className="text-[10px] font-medium text-slate-500 mt-2 whitespace-pre-line">
+                              {notice.rejection_notes}
+                            </p>
+                          )}
+
+                        </div>
+
+                      </td>
+
+                      {/* DATE */}
+
+                      <td className="px-8 py-6">
+
+                        <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500">
+
+                          <CalendarClock
+                            size={13}
+                          />
+
+                          {notice.rejected_at
+                            ? new Date(
+                                notice.rejected_at
+                              ).toLocaleDateString()
+                            : 'N/A'}
+
+                        </div>
+
+                      </td>
+
+                      {/* ACTION */}
+
+                      <td className="px-8 py-6">
+
+                        <div className="flex items-center justify-end gap-2">
+
+                          {/* DELETE */}
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                              handleDeleteRejectionNotice(
+                                notice
+                              )
+                            }
+                            className="h-10 w-10 p-0 rounded-xl border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition-all"
+                            title="Permanently Delete Rejection and Original Application"
+                            aria-label={`Permanently delete rejection notice ${notice.id} and original application ${notice.original_vessel_id}`}
+                          >
+
+                            <Trash2
+                              size={15}
+                            />
+
+                          </Button>
+
+                        </div>
+
+                      </td>
+
+                    </tr>
+                  );
+                }
+              )}
+
+              {filteredRejectionNotices.length ===
+                0 && (
+                <tr>
+
+                  <td
+                    colSpan={6}
+                    className="px-8 py-12 text-center"
+                  >
+
+                    <div className="flex flex-col items-center">
+
+                      <CheckCircle2
+                        size={30}
+                        className="text-emerald-400 mb-3"
+                      />
+
+                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                        No rejection notices found.
+                      </p>
+
+                    </div>
+
                   </td>
 
                 </tr>
@@ -481,52 +1323,18 @@ export default function AuditQueuePage() {
 
       </div>
 
-      {/* AUDIT POPUP */}
+      {/* =================================================
+          AUDIT POPUP
+      ================================================= */}
 
       {selectedVessel && (
         <AuditDetailPopup
           vessel={selectedVessel}
           onClose={() =>
-            setSelectedVessel(
-              null
-            )
+            setSelectedVessel(null)
           }
         />
       )}
-
-    </div>
-  );
-}
-
-/* =========================================================
-   DETAIL ITEM
-========================================================= */
-
-function DetailItem({
-  label,
-  value,
-  icon
-}: {
-  label: string;
-  value: string;
-  icon?: ReactNode;
-}) {
-  return (
-    <div>
-
-      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
-
-        {icon}
-
-        {label}
-
-      </p>
-
-      <p className="text-xs font-black text-slate-900 uppercase mt-0.5">
-
-        {value || 'N/A'}
-
-      </p>
 
     </div>
   );
@@ -538,7 +1346,7 @@ function DetailItem({
 
 function AuditDetailPopup({
   vessel,
-  onClose
+  onClose,
 }: {
   vessel: any;
   onClose: () => void;
@@ -547,290 +1355,192 @@ function AuditDetailPopup({
     updateVesselStatus,
     scheduleInspection,
     inspectors = [],
-    deleteVessel
+    deleteVessel,
   } = useAquaData();
 
   const [phase, setPhase] =
-    useState<
-      'review' |
-      'schedule' |
-      'reject'
-    >('review');
+    useState<AuditPhase>('review');
 
   const [
     assignedInspectorIdNumber,
-    setAssignedInspectorIdNumber
-  ] = useState<string>("");
+    setAssignedInspectorIdNumber,
+  ] = useState('');
 
   const [
     scheduledDate,
-    setScheduledDate
-  ] = useState<string>(
+    setScheduledDate,
+  ] = useState(
     new Date()
       .toISOString()
       .split('T')[0]
   );
 
-  /* =========================================================
-     REJECTION STATE
-  ========================================================= */
+  /* =======================================================
+     REJECTION
+  ======================================================= */
 
   const [
     rejectionReason,
-    setRejectionReason
-  ] = useState<string>(
-    "Invalid Valid ID"
+    setRejectionReason,
+  ] = useState(
+    'Invalid Valid ID'
   );
 
   const [
     rejectionNotes,
-    setRejectionNotes
-  ] = useState<string>("");
+    setRejectionNotes,
+  ] = useState('');
 
   const [
     isSubmittingRejection,
-    setIsSubmittingRejection
-  ] = useState<boolean>(
-    false
-  );
+    setIsSubmittingRejection,
+  ] = useState(false);
 
-  /* =========================================================
+  /* =======================================================
      CATEGORY
-  ========================================================= */
-
-  const rawCategory = (
-    vessel.asset_category ||
-    vessel.type ||
-    ''
-  ).toLowerCase();
+  ======================================================= */
 
   const isPangulong =
-    rawCategory ===
-    'pangulong';
+    isPangulongCategory(vessel);
 
   const isFishingGear =
-    rawCategory ===
-    'gears';
+    isFishingGearCategory(vessel);
 
   const isPayao =
-    [
-      'payao',
-      'balsa'
-    ].includes(
-      rawCategory
-    );
+    isPayaoCategory(vessel);
 
-  /* =========================================================
-     MOTORIZED VESSEL
-  ========================================================= */
+  /* =======================================================
+     MOTOR / NON-MOTOR
+  ======================================================= */
 
   const isMotorizedVessel =
-    rawCategory ===
-      'vessel' &&
+    isVesselCategory(vessel) &&
     (
       vessel.vesselType ===
         'motorized' ||
-
       vessel.vessel_type ===
         'motorized' ||
-
-      vessel.is_motorized ===
-        true
+      vessel.is_motorized === true
     );
-
-  /* =========================================================
-     NON-MOTORIZED VESSEL
-  ========================================================= */
 
   const isNonMotorizedVessel =
-    rawCategory ===
-      'vessel' &&
+    isVesselCategory(vessel) &&
     (
       vessel.vesselType ===
         'non-motorized' ||
-
       vessel.vessel_type ===
         'non-motorized' ||
-
-      vessel.is_motorized ===
-        false
+      vessel.is_motorized === false
     );
 
-  /* =========================================================
-     GEAR CATEGORY
-  ========================================================= */
+  const gearCategory =
+    isGearCategory(vessel);
 
-  const isGearCategory = [
-    'payao',
-    'balsa',
-    'pangulong',
-    'gears'
-  ].includes(
-    rawCategory
-  );
-
-  /* =========================================================
-     FIXED DISPLAY VESSEL NAME
-     
-     This is the main fix requested.
-     
-     For motorized vessels:
-       vessel.vessel_name
-     
-     is checked first.
-  ========================================================= */
+  /* =======================================================
+     DISPLAY NAME
+  ======================================================= */
 
   const displayVesselName =
-    useMemo(() => {
+    useMemo(
+      () =>
+        getAssetDisplayName(
+          vessel
+        ),
+      [vessel]
+    );
 
-      const nameCandidates = [
-        vessel.vessel_name,
-        vessel.name,
-        vessel.boat_name,
-        vessel.registered_vessel_name,
-        vessel.vesselName
-      ];
-
-      const validName =
-        nameCandidates.find(
-          (name) =>
-            typeof name ===
-              'string' &&
-            name.trim()
-              .length > 0
-        );
-
-      if (validName) {
-        return validName.trim();
-      }
-
-      if (isPayao) {
-        return (
-          vessel.payao_vessel_name ||
-          vessel.parent_vessel_name ||
-          'UNNAMED ASSET'
-        );
-      }
-
-      if (isPangulong) {
-        return (
-          vessel.gear_type ||
-          'UNNAMED PANGULONG'
-        );
-      }
-
-      if (isFishingGear) {
-        return (
-          vessel.gear_type ||
-          'UNNAMED FISHING GEAR'
-        );
-      }
-
-      if (
-        rawCategory ===
-        'vessel'
-      ) {
-        return 'UNNAMED VESSEL';
-      }
-
-      return 'Audit Review';
-
-    }, [
-      vessel,
-      isPayao,
-      isPangulong,
-      isFishingGear,
-      rawCategory
-    ]);
-
-  /* =========================================================
+  /* =======================================================
      DOCUMENT REQUIREMENTS
-  ========================================================= */
+
+     Gear categories use:
+     - BFAR Permit
+     - MARINA Permit
+     - Barangay Clearance
+     - Cedula
+
+     Vessel categories use:
+     - Barangay Clearance
+     - Valid ID
+     - Cedula
+  ======================================================= */
 
   const activeDocKeys =
     useMemo(() => {
-
-      if (isGearCategory) {
+      if (gearCategory) {
         return [
           'bfarPermit',
           'marinaPermit',
           'barangayClearance',
-          'cedula'
+          'cedula',
         ];
       }
 
       return [
         'barangayClearance',
         'validID',
-        'cedula'
+        'cedula',
       ];
+    }, [gearCategory]);
 
-    }, [
-      isGearCategory
-    ]);
-
-  /* =========================================================
+  /* =======================================================
      ACTIVE PERSONNEL
-  ========================================================= */
+  ======================================================= */
 
   const activePersonnel =
     useMemo(() => {
-
       return (
         inspectors || []
       ).filter(
         (ins: any) =>
-          ins.status ===
+          String(
+            ins.status || ''
+          )
+            .toLowerCase()
+            .trim() ===
           'approved'
       );
+    }, [inspectors]);
 
-    }, [
-      inspectors
-    ]);
-
-  /* =========================================================
+  /* =======================================================
      PROCEED
-  ========================================================= */
+
+     Gear/PAYAO/PANGULONG:
+       Direct Pass
+
+     Vessel:
+       Schedule Inspection
+  ======================================================= */
 
   const handleProceed =
     async () => {
-
-      if (isGearCategory) {
-
+      if (gearCategory) {
         try {
-
           if (
-            typeof updateVesselStatus ===
+            typeof updateVesselStatus !==
             'function'
           ) {
-
-            await updateVesselStatus(
-              vessel.id,
-              'Passed'
+            throw new Error(
+              'Database status update function is unavailable.'
             );
-
-            toast.success(
-              `${
-                (
-                  vessel.asset_category ||
-                  'Asset'
-                ).toUpperCase()
-              } Approved Directly`
-            );
-
-          } else {
-
-            toast.error(
-              "Database connection function missing."
-            );
-
-            return;
           }
 
+          await updateVesselStatus(
+            vessel.id,
+            'Passed'
+          );
+
+          toast.success(
+            `${getCategoryLabel(
+              vessel
+            )} Approved Directly`,
+            {
+              description:
+                `Application ${vessel.id} passed the audit.`,
+            }
+          );
+
           onClose();
-
         } catch (error: any) {
-
           console.error(
             'Direct approval error:',
             error
@@ -841,31 +1551,37 @@ function AuditDetailPopup({
             {
               description:
                 error?.message ||
-                'Unable to update application status.'
+                'Unable to update application status.',
             }
           );
         }
 
-      } else {
-
-        setPhase(
-          'schedule'
-        );
-
+        return;
       }
+
+      setPhase('schedule');
     };
 
-  /* =========================================================
-     REJECT SUBMISSION
-  ========================================================= */
+  /* =======================================================
+     REJECT
+
+     Rejection does NOT delete the application.
+
+       Vessels:
+         status = Rejected
+
+       RejectionNotices:
+         new historical notice
+  ======================================================= */
 
   const handleRejectSubmission =
     async () => {
-
       if (!rejectionReason) {
-        return toast.error(
-          "Please select a reason for rejection."
+        toast.error(
+          'Please select a reason for rejection.'
         );
+
+        return;
       }
 
       setIsSubmittingRejection(
@@ -873,170 +1589,183 @@ function AuditDetailPopup({
       );
 
       try {
-
-        const fullReasonText =
-          rejectionNotes
-            ? `${rejectionReason}: ${rejectionNotes}`
-            : rejectionReason;
+        const rejectionTimestamp =
+          new Date().toISOString();
 
         /* =================================================
-           UPDATE SUPABASE
+           STEP 1
+           Create rejection notice.
         ================================================= */
 
         const {
-          error
+          error: noticeError,
         } = await supabase
-          .from('Vessels')
-          .update({
-            status:
-              'Rejected',
+          .from('RejectionNotices')
+          .insert([
+            {
+              original_vessel_id:
+                String(vessel.id),
 
-            rejection_reason:
-              fullReasonText,
+              owner_name:
+                vessel.owner_name ||
+                vessel.owner ||
+                'N/A',
 
-            updated_at:
-              new Date()
-                .toISOString()
-          })
-          .eq(
-            'id',
-            vessel.id
-          );
+              vessel_name:
+                getAssetDisplayName(
+                  vessel
+                ),
 
-        if (error) {
-          throw error;
+              asset_category:
+                vessel.asset_category ||
+                vessel.type ||
+                'GENERAL',
+
+              barangay:
+                vessel.barangay ||
+                'N/A',
+
+              rejection_reason:
+                rejectionReason,
+
+              rejection_notes:
+                rejectionNotes ||
+                null,
+
+              rejected_at:
+                rejectionTimestamp,
+
+              updated_at:
+                rejectionTimestamp,
+            },
+          ]);
+
+        if (noticeError) {
+          throw noticeError;
         }
 
         /* =================================================
-           CONTEXT FALLBACK
+           STEP 2
+           KEEP original Vessels record.
+           Only change its status.
         ================================================= */
 
         if (
-          typeof updateVesselStatus ===
+          typeof updateVesselStatus !==
           'function'
         ) {
-
-          await updateVesselStatus(
-            vessel.id,
-            'Rejected'
+          throw new Error(
+            'Status update function is not available in AquaRegCONTEXT.'
           );
         }
 
-        toast.error(
-          "Registration Rejected",
+        await updateVesselStatus(
+          vessel.id,
+          'Rejected'
+        );
+
+        toast.success(
+          'Registration Rejected',
           {
             description:
-              `Application ID ${vessel.id} marked as rejected.`
+              `Application ${vessel.id} was retained as Rejected and added to Rejection Notices.`,
           }
         );
 
         onClose();
-
-      } catch (err: any) {
-
+      } catch (error: any) {
         console.error(
-          "Rejection submission error:",
-          err
+          'Rejection submission error:',
+          error
         );
 
         toast.error(
-          "Failed to update status",
+          'Failed to reject application',
           {
             description:
-              err?.message ||
-              "An error occurred while marking as rejected."
+              error?.message ||
+              'The rejection notice could not be saved or the application status could not be updated.',
           }
         );
-
       } finally {
-
         setIsSubmittingRejection(
           false
         );
       }
     };
 
-  /* =========================================================
+  /* =======================================================
      FINAL SCHEDULE
-  ========================================================= */
+  ======================================================= */
 
   const handleFinalSchedule =
     async () => {
-
       if (
         !assignedInspectorIdNumber
       ) {
-
-        return toast.error(
-          "Officer Assignment Required"
+        toast.error(
+          'Officer Assignment Required'
         );
+
+        return;
       }
 
       try {
-
         if (
           typeof scheduleInspection ===
-          "function"
+          'function'
         ) {
-
           await scheduleInspection(
             vessel.id,
             assignedInspectorIdNumber,
             scheduledDate
           );
-
         } else if (
           typeof updateVesselStatus ===
-          "function"
+          'function'
         ) {
-
           await updateVesselStatus(
             vessel.id,
-            "Scheduled"
+            'Scheduled'
           );
-
         } else {
-
           throw new Error(
-            "Missing structural mutators inside context wrapper"
+            'Missing structural mutators inside context wrapper.'
           );
         }
 
         toast.success(
-          "Successfully scheduled for inspection.",
+          'Successfully scheduled for inspection.',
           {
             description:
-              "The inspection has been successfully scheduled."
+              'The inspection has been successfully scheduled.',
           }
         );
 
         onClose();
-
       } catch (error: any) {
-
         console.error(
-          "Schedule Error:",
+          'Schedule Error:',
           error
         );
 
         toast.error(
-          "Scheduling failed",
+          'Scheduling failed',
           {
             description:
               error?.message ||
-              "Unable to bind assigned personnel profile."
+              'Unable to bind assigned personnel profile.',
           }
         );
       }
     };
 
-  /* =========================================================
+  /* =======================================================
      DELETE FROM POPUP
-  ========================================================= */
+  ======================================================= */
 
   const handleDeleteAuditRecord =
     async () => {
-
       const confirmed =
         window.confirm(
           `Are you sure you want to permanently delete this audit application?\n\n` +
@@ -1054,12 +1783,10 @@ function AuditDetailPopup({
       }
 
       try {
-
         if (
           typeof deleteVessel !==
           'function'
         ) {
-
           throw new Error(
             'Delete function is not available in AquaRegCONTEXT.'
           );
@@ -1075,12 +1802,10 @@ function AuditDetailPopup({
           'Audit application deleted',
           {
             description:
-              `Application ${vessel.id} was permanently removed.`
+              `Application ${vessel.id} was permanently removed and its ID is available for reuse.`,
           }
         );
-
       } catch (error: any) {
-
         console.error(
           'Audit deletion error:',
           error
@@ -1091,19 +1816,18 @@ function AuditDetailPopup({
           {
             description:
               error?.message ||
-              'Unable to permanently delete this application.'
+              'Unable to permanently delete this application.',
           }
         );
       }
     };
 
-  /* =========================================================
+  /* =======================================================
      TECHNICAL SPECS
-  ========================================================= */
+  ======================================================= */
 
   const renderTechnicalSpecs =
     () => {
-
       return (
         <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm relative overflow-hidden">
 
@@ -1124,19 +1848,14 @@ function AuditDetailPopup({
 
             <DetailItem
               label="Category"
-              value={
-                isPayao
-                  ? 'PAYAO/BALSA'
-                  : rawCategory ===
-                    'gears'
-                  ? 'FISHING GEAR'
-                  : rawCategory.toUpperCase() ||
-                    '---'
-              }
+              value={getCategoryLabel(
+                vessel
+              )}
             />
 
-            {rawCategory ===
-            'vessel' ? (
+            {isVesselCategory(
+              vessel
+            ) ? (
 
               <DetailItem
                 label="Propulsion"
@@ -1147,11 +1866,7 @@ function AuditDetailPopup({
                     ? 'NON-MOTORIZED'
                     : vessel.vesselType?.toUpperCase() ||
                       vessel.vessel_type?.toUpperCase() ||
-                      (
-                        vessel.is_motorized
-                          ? 'MOTORIZED'
-                          : 'NON-MOTORIZED'
-                      )
+                      'N/A'
                 }
                 icon={
                   <Ship
@@ -1161,21 +1876,28 @@ function AuditDetailPopup({
                 }
               />
 
-            ) : rawCategory ===
-                'payao' ||
-              rawCategory ===
-                'balsa' ? (
+            ) : isPayao ? (
 
-              null
+              <DetailItem
+                label="Asset Type"
+                value="PAYAO/BALSA"
+                icon={
+                  <Anchor
+                    size={14}
+                    className="text-orange-500"
+                  />
+                }
+              />
 
             ) : (
 
               <DetailItem
-                label="Method/Type"
+                label="Method / Type"
                 value={
                   vessel.gear_type ||
-                  rawCategory.toUpperCase() ||
-                  'STATIONARY'
+                  getCategoryLabel(
+                    vessel
+                  )
                 }
                 icon={
                   <LifeBuoy
@@ -1189,52 +1911,46 @@ function AuditDetailPopup({
 
           </div>
 
-          {![
-            'payao',
-            'balsa',
-            'gears',
-            'pangulong'
-          ].includes(
-            rawCategory
-          ) && (
+          {!gearCategory &&
+            isVesselCategory(
+              vessel
+            ) && (
+              <div className="pt-8 border-t border-slate-100 grid grid-cols-3 gap-2">
 
-            <div className="pt-8 border-t border-slate-100 grid grid-cols-3 gap-2">
+                <DetailItem
+                  label="Length (M)"
+                  value={
+                    vessel.hull_length ||
+                    '0.00'
+                  }
+                />
 
-              <DetailItem
-                label="Length (M)"
-                value={
-                  vessel.hull_length ||
-                  '0.00'
-                }
-              />
+                <DetailItem
+                  label="Width (M)"
+                  value={
+                    vessel.hull_width ||
+                    '0.00'
+                  }
+                />
 
-              <DetailItem
-                label="Width (M)"
-                value={
-                  vessel.hull_width ||
-                  '0.00'
-                }
-              />
+                <DetailItem
+                  label="Depth (M)"
+                  value={
+                    vessel.hull_depth ||
+                    '0.00'
+                  }
+                />
 
-              <DetailItem
-                label="Depth (M)"
-                value={
-                  vessel.hull_depth ||
-                  '0.00'
-                }
-              />
-
-            </div>
-
-          )}
+              </div>
+            )}
 
         </div>
       );
     };
 
-  /* =========================================================
+  /* =======================================================
      MODAL
-  ========================================================= */
+  ======================================================= */
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1250,9 +1966,7 @@ function AuditDetailPopup({
 
       <div className="relative bg-white w-full max-w-7xl h-[92vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
 
-        {/* =================================================
-            MODAL HEADER
-        ================================================= */}
+        {/* HEADER */}
 
         <div className="bg-slate-900 p-8 text-white flex justify-between items-center shrink-0">
 
@@ -1268,11 +1982,6 @@ function AuditDetailPopup({
 
             <div>
 
-              {/* =================================================
-                  FIXED:
-                  ACTUAL VESSEL NAME DISPLAY
-              ================================================= */}
-
               <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">
                 {displayVesselName}
               </h2>
@@ -1285,13 +1994,10 @@ function AuditDetailPopup({
 
                 <Badge className="mt-2 bg-blue-500 text-white border-none text-[9px] font-black uppercase tracking-widest">
 
-                  {(
-                    vessel.asset_category ||
-                    vessel.type ||
-                    'ASSET'
-                  ).toUpperCase()}
-
-                  {' '}Audit
+                  {getCategoryLabel(
+                    vessel
+                  )}{' '}
+                  Audit
 
                 </Badge>
 
@@ -1303,8 +2009,6 @@ function AuditDetailPopup({
 
           <div className="flex gap-3">
 
-            {/* DELETE */}
-
             <button
               onClick={
                 handleDeleteAuditRecord
@@ -1314,13 +2018,9 @@ function AuditDetailPopup({
               title="Delete Audit Record"
             >
 
-              <Trash2
-                className="group-hover:scale-110 transition-transform"
-              />
+              <Trash2 className="group-hover:scale-110 transition-transform" />
 
             </button>
-
-            {/* CLOSE */}
 
             <button
               onClick={onClose}
@@ -1329,9 +2029,7 @@ function AuditDetailPopup({
               title="Close Audit Popup"
             >
 
-              <X
-                className="group-hover:rotate-90 transition-transform"
-              />
+              <X className="group-hover:rotate-90 transition-transform" />
 
             </button>
 
@@ -1339,34 +2037,28 @@ function AuditDetailPopup({
 
         </div>
 
-        {/* =================================================
-            MODAL CONTENT
-        ================================================= */}
+        {/* CONTENT */}
 
         <div className="flex-1 overflow-y-auto p-10 bg-slate-50/50">
 
           {/* =================================================
-              REVIEW PHASE
+              REVIEW
           ================================================= */}
 
-          {phase ===
-            'review' && (
-
+          {phase === 'review' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
 
               {/* LEFT */}
 
               <div className="lg:col-span-4 space-y-6">
 
-                {/* OWNER INFORMATION */}
+                {/* OWNER */}
 
                 <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm">
 
                   <h4 className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-6 flex items-center gap-2">
 
-                    <User
-                      size={14}
-                    />
+                    <User size={14} />
 
                     Owner Information
 
@@ -1382,9 +2074,7 @@ function AuditDetailPopup({
                         'N/A'
                       }
                       icon={
-                        <User
-                          size={14}
-                        />
+                        <User size={14} />
                       }
                     />
 
@@ -1396,9 +2086,7 @@ function AuditDetailPopup({
                         'N/A'
                       }
                       icon={
-                        <Phone
-                          size={14}
-                        />
+                        <Phone size={14} />
                       }
                     />
 
@@ -1421,9 +2109,7 @@ function AuditDetailPopup({
                     {!isPangulong &&
                       !isPayao &&
                       !isFishingGear && (
-
                         <>
-
                           <DetailItem
                             label="Place of Built"
                             value={
@@ -1439,25 +2125,18 @@ function AuditDetailPopup({
                               'N/A'
                             }
                           />
-
                         </>
-
                       )}
 
                   </div>
 
                 </div>
 
-                {/* =================================================
-                    CATEGORY-SPECIFIC DETAILS
-                ================================================= */}
+                {/* CATEGORY DETAILS */}
 
-                {(
-                  isPangulong ||
+                {(isPangulong ||
                   isFishingGear ||
-                  isPayao
-                ) && (
-
+                  isPayao) && (
                   <div className="bg-white p-8 rounded-[2.5rem] shadow-sm">
 
                     <div className="flex items-center gap-2 mb-6">
@@ -1482,45 +2161,27 @@ function AuditDetailPopup({
                       <div className="p-4 mt-1 rounded-xl text-sm font-black uppercase text-black whitespace-pre-line">
 
                         {isPayao ? (
-
                           <>
-
                             {vessel.units_in_words ||
                               'ENTER UNIT COUNT'}
 
-                            {(
-                              vessel.boat_name ||
-                              vessel.payao_numbers
-                            ) && (
-
+                            {(vessel.boat_name ||
+                              vessel.payao_numbers) && (
                               <>
-
                                 {'\n'}
-
-                                {
-                                  vessel.boat_name ||
-                                  vessel.payao_numbers
-                                }
-
+                                {vessel.boat_name ||
+                                  vessel.payao_numbers}
                               </>
-
                             )}
-
                           </>
-
                         ) : (
-
                           vessel.units_in_words ||
-
-                          (
-                            isPangulong
-                              ? 'ONE (1) UNIT RING NET (PANGULONG)'
-                              : `ONE (1) UNIT ${
-                                  vessel.gear_type ||
-                                  'JIGGING'
-                                }`
-                          )
-
+                          (isPangulong
+                            ? 'ONE (1) UNIT RING NET (PANGULONG)'
+                            : `ONE (1) UNIT ${
+                                vessel.gear_type ||
+                                'JIGGING'
+                              }`)
                         )}
 
                       </div>
@@ -1528,19 +2189,15 @@ function AuditDetailPopup({
                     </div>
 
                   </div>
-
                 )}
 
                 {/* TECHNICAL */}
 
                 {renderTechnicalSpecs()}
 
-                {/* =================================================
-                    MOTORIZED TONNAGE
-                ================================================= */}
+                {/* TONNAGE */}
 
                 {isMotorizedVessel && (
-
                   <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
 
                     <Anchor
@@ -1587,7 +2244,6 @@ function AuditDetailPopup({
                     </div>
 
                   </div>
-
                 )}
 
                 {/* ACTIONS */}
@@ -1601,7 +2257,7 @@ function AuditDetailPopup({
                     className="w-full h-16 bg-emerald-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-700 transition-all"
                   >
 
-                    {isGearCategory
+                    {gearCategory
                       ? 'Verify & Pass Audit'
                       : 'Verify & Schedule Inspection'}
 
@@ -1635,9 +2291,7 @@ function AuditDetailPopup({
 
               </div>
 
-              {/* =================================================
-                  DOCUMENT VAULT
-              ================================================= */}
+              {/* DOCUMENT VAULT */}
 
               <div className="lg:col-span-8 bg-white rounded-[3rem] border border-slate-200 shadow-inner overflow-hidden flex flex-col">
 
@@ -1664,13 +2318,12 @@ function AuditDetailPopup({
                         const snakeKey =
                           key.replace(
                             /[A-Z]/g,
-                            letter =>
+                            (letter) =>
                               `_${letter.toLowerCase()}`
                           );
 
                         const altSnakeKey =
-                          key ===
-                          'validID'
+                          key === 'validID'
                             ? 'valid_id'
                             : snakeKey;
 
@@ -1678,21 +2331,16 @@ function AuditDetailPopup({
                           vessel.requirements?.[
                             key
                           ] ||
-
                           vessel.requirements?.[
                             altSnakeKey
                           ] ||
-
                           vessel.documents?.[
                             key
                           ] ||
-
                           vessel.documents?.[
                             altSnakeKey
                           ] ||
-
                           vessel[key] ||
-
                           vessel[
                             altSnakeKey
                           ];
@@ -1771,12 +2419,10 @@ function AuditDetailPopup({
           )}
 
           {/* =================================================
-              SCHEDULE PHASE
+              SCHEDULE
           ================================================= */}
 
-          {phase ===
-            'schedule' && (
-
+          {phase === 'schedule' && (
             <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
 
               <div className="flex justify-between items-end">
@@ -1788,9 +2434,9 @@ function AuditDetailPopup({
                   </h3>
 
                   <p className="text-slate-500 text-[10px] font-black uppercase mt-2">
-                    Audit Site: {
-                      vessel.barangay
-                    }
+                    Audit Site:{' '}
+                    {vessel.barangay ||
+                      'N/A'}
                   </p>
 
                 </div>
@@ -1816,14 +2462,11 @@ function AuditDetailPopup({
                       )
                     }
                     className="w-full h-12 mt-1 rounded-xl font-bold border px-4 border-slate-200 outline-none"
-                    title="Select scheduled audit date"
                   />
 
                 </div>
 
               </div>
-
-              {/* INSPECTORS */}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -1833,7 +2476,7 @@ function AuditDetailPopup({
                     const targetIdNum =
                       ins.idNumber ||
                       ins.id_number ||
-                      "";
+                      '';
 
                     const targetName =
                       ins.name ||
@@ -1843,11 +2486,9 @@ function AuditDetailPopup({
                     const isSelected =
                       assignedInspectorIdNumber ===
                         targetIdNum &&
-                      targetIdNum !==
-                        "";
+                      targetIdNum !== '';
 
                     return (
-
                       <button
                         key={ins.id}
                         type="button"
@@ -1894,13 +2535,10 @@ function AuditDetailPopup({
                               </p>
 
                               {targetIdNum && (
-
                                 <span className="text-[8px] font-mono tracking-wider font-black text-slate-400 uppercase bg-slate-100 px-1 py-0.5 rounded w-fit mt-1">
-                                  ID: {
-                                    targetIdNum
-                                  }
+                                  ID:{' '}
+                                  {targetIdNum}
                                 </span>
-
                               )}
 
                             </div>
@@ -1910,32 +2548,25 @@ function AuditDetailPopup({
                         </div>
 
                         {isSelected && (
-
                           <CheckCircle2
                             className="text-blue-600"
                             size={24}
                           />
-
                         )}
 
                       </button>
-
                     );
                   }
                 )}
 
                 {activePersonnel.length ===
                   0 && (
-
                   <div className="col-span-2 py-8 text-center text-xs font-bold text-slate-400 border border-dashed rounded-3xl">
                     No active verified inspectors found on file.
                   </div>
-
                 )}
 
               </div>
-
-              {/* SCHEDULE ACTIONS */}
 
               <div className="flex gap-4 pt-6">
 
@@ -1976,12 +2607,10 @@ function AuditDetailPopup({
           )}
 
           {/* =================================================
-              REJECT PHASE
+              REJECT
           ================================================= */}
 
-          {phase ===
-            'reject' && (
-
+          {phase === 'reject' && (
             <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 bg-white p-8 rounded-[2.5rem] border border-red-100 shadow-xl">
 
               <div>
@@ -2013,12 +2642,11 @@ function AuditDetailPopup({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
                   {[
-                    "Invalid Valid ID",
-                    "Missing / Invalid Document Files",
-                    "Wrong / Unreachable Contact Number"
+                    'Invalid Valid ID',
+                    'Missing / Invalid Document Files',
+                    'Wrong / Unreachable Contact Number',
                   ].map(
                     (reason) => (
-
                       <button
                         key={reason}
                         type="button"
@@ -2036,13 +2664,10 @@ function AuditDetailPopup({
                       >
                         {reason}
                       </button>
-
                     )
                   )}
 
                 </div>
-
-                {/* NOTES */}
 
                 <div className="space-y-2 pt-2">
 
@@ -2063,15 +2688,13 @@ function AuditDetailPopup({
                         e.target.value
                       )
                     }
-                    placeholder="Specify why the ID/Document/Number was flagged (e.g., Expiration date passed, blurriness, invalid phone digits)..."
+                    placeholder="Specify why the ID/Document/Number was flagged..."
                     className="w-full h-32 p-4 rounded-2xl border border-slate-200 bg-slate-50 text-xs font-medium focus:ring-2 focus:ring-red-500 focus:outline-none"
                   />
 
                 </div>
 
               </div>
-
-              {/* REJECTION BUTTONS */}
 
               <div className="flex gap-4 pt-4 border-t border-slate-100">
 
@@ -2081,6 +2704,9 @@ function AuditDetailPopup({
                     setPhase(
                       'review'
                     )
+                  }
+                  disabled={
+                    isSubmittingRejection
                   }
                   className="h-14 px-8 rounded-2xl font-black text-xs uppercase italic tracking-tighter"
                 >
@@ -2098,8 +2724,8 @@ function AuditDetailPopup({
                 >
 
                   {isSubmittingRejection
-                    ? "Submitting..."
-                    : "Confirm Rejection"}
+                    ? 'Saving Rejection...'
+                    : 'Confirm Rejection'}
 
                 </Button>
 
@@ -2109,9 +2735,9 @@ function AuditDetailPopup({
           )}
 
         </div>
-
       </div>
 
     </div>
   );
 }
+
