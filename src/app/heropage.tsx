@@ -1053,7 +1053,7 @@ export default function Homepage() {
               <button
                 type="button"
                 onClick={() =>
-                  navigate('/verify-permit')
+                  navigate('/VerifyPermit')
                 }
                 className="px-8 py-5 bg-white/15 hover:bg-white/25 text-white border border-white/30 backdrop-blur-md rounded-full font-black uppercase tracking-widest text-xs transition-all active:scale-95 shadow-lg w-full sm:w-auto text-center"
               >
