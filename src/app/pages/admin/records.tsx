@@ -1257,7 +1257,6 @@ function RegistryView({
                 <th className="px-8 py-5">Client / Owner</th>
                 <th className="px-8 py-5">Category</th>
                 <th className="px-8 py-5">COI</th>
-                <th className="px-8 py-5">Permit</th>
                 <th className="px-8 py-5 text-right">Actions</th>
               </tr>
             </thead>
@@ -1290,8 +1289,7 @@ function RegistryView({
                       ''
                     : '';
 
-                  const permitNo = getPermitNumber(record);
-
+                  
                   return (
                     <tr
                       key={record.id}
@@ -1344,21 +1342,7 @@ function RegistryView({
                         )}
                       </td>
 
-                      <td className="px-8 py-5">
-                        {permitNo ? (
-                          <div className="flex items-center gap-2">
-                            <CreditCard size={15} className="text-blue-500" />
-                            <span className="text-[10px] font-black text-slate-700 uppercase">
-                              {permitNo}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-[9px] font-black uppercase text-slate-300">
-                            No Permit
-                          </span>
-                        )}
-                      </td>
-
+                     
                       <td className="px-8 py-5 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <Button
