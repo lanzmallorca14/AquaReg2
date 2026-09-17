@@ -1468,8 +1468,6 @@ function AuditDetailPopup({
     useMemo(() => {
       if (gearCategory) {
         return [
-          'bfarPermit',
-          'marinaPermit',
           'barangayClearance',
           'cedula',
         ];
@@ -2312,38 +2310,19 @@ function AuditDetailPopup({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-10">
 
-                    {activeDocKeys.map(
-                      (key) => {
+                    {activeDocKeys.map((key) => {
+                        const snakeKey = key.replace(
+                          /[A-Z]/g,
+                          (letter) => `_${letter.toLowerCase()}`
+                        );
 
-                        const snakeKey =
-                          key.replace(
-                            /[A-Z]/g,
-                            (letter) =>
-                              `_${letter.toLowerCase()}`
-                          );
-
-                        const altSnakeKey =
-                          key === 'validID'
-                            ? 'valid_id'
-                            : snakeKey;
+                        const altSnakeKey = key === 'validID' ? 'valid_id' : snakeKey;
 
                         const src =
-                          vessel.requirements?.[
-                            key
-                          ] ||
-                          vessel.requirements?.[
-                            altSnakeKey
-                          ] ||
-                          vessel.documents?.[
-                            key
-                          ] ||
-                          vessel.documents?.[
-                            altSnakeKey
-                          ] ||
-                          vessel[key] ||
-                          vessel[
-                            altSnakeKey
-                          ];
+                          vessel.requirements?.[key] ??
+                          vessel.requirements?.[altSnakeKey] ??
+                          vessel[key] ??
+                          vessel[altSnakeKey];
 
                         return (
                           <div
@@ -2357,10 +2336,6 @@ function AuditDetailPopup({
                                 .replace(
                                   /([A-Z])/g,
                                   ' $1'
-                                )
-                                .replace(
-                                  'bfar',
-                                  'BFAR'
                                 )
                                 .toUpperCase()}
 

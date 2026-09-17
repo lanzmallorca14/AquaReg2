@@ -590,11 +590,7 @@ const printRecord = (rawRecord: any) => {
 
   const validId = docs.validID || docs.valid_id || record.valid_id || '';
 
-  const marinaPermit =
-    docs.marinaPermit || docs.marina_permit || record.marina_permit || '';
-
-  const bfarPermit =
-    docs.bfarPermit || docs.bfar_permit || record.bfar_permit || '';
+ 
 
   const isVessel = isVesselCategoryOf(category);
   const showPermitPayment = showsPermitPayment(category);
@@ -606,8 +602,6 @@ const printRecord = (rawRecord: any) => {
     ...(isVessel
       ? []
       : [
-          { name: 'MARINA Permit', value: marinaPermit },
-          { name: 'BFAR Permit', value: bfarPermit },
         ]),
   ];
 
@@ -1781,23 +1775,7 @@ function ManualEntryModal({ onClose }: { onClose: () => void }) {
               onRemove={() => setImages((prev) => ({ ...prev, validID: '' }))}
             />
 
-            {!isVessel && (
-              <>
-                <ImageUploaderBox
-                  label="Marina Permit"
-                  imageSrc={images.marinaPermit}
-                  onUpload={(e) => handleImageUpload('marinaPermit', e)}
-                  onRemove={() => setImages((prev) => ({ ...prev, marinaPermit: '' }))}
-                />
-
-                <ImageUploaderBox
-                  label="BFAR Permit"
-                  imageSrc={images.bfarPermit}
-                  onUpload={(e) => handleImageUpload('bfarPermit', e)}
-                  onRemove={() => setImages((prev) => ({ ...prev, bfarPermit: '' }))}
-                />
-              </>
-            )}
+          
           </div>
 
           <div className="pt-4 border-t">
@@ -1954,11 +1932,7 @@ function DetailView({
 
   const validIdImg = docs.validID || docs.valid_id || normalizedRecord.valid_id || null;
 
-  const marinaPermitImg =
-    docs.marina_permit || docs.marinaPermit || normalizedRecord.marina_permit || null;
-
-  const bfarPermitImg =
-    docs.bfar_permit || docs.bfarPermit || normalizedRecord.bfar_permit || null;
+  
 
   return (
     <div className="space-y-8 animate-in slide-in-from-right duration-500 pb-20 relative">
@@ -2348,8 +2322,7 @@ function DetailView({
                 : [
                     { label: 'Barangay Clearance', url: barangayClearanceImg },
                     { label: 'Cedula', url: cedulaImg },
-                    { label: 'MARINA Permit', url: marinaPermitImg },
-                    { label: 'BFAR Permit', url: bfarPermitImg },
+                    
                   ]
               ).map((docItem, idx) => (
                 <div

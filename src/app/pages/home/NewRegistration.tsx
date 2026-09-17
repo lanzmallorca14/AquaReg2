@@ -469,12 +469,13 @@ const parseOwnerNameParts = (fullName: string) => {
    DOCUMENT LABEL HELPER 
 ============================================================ */ 
  
-const docLabel = (key: string): string => 
-  key 
-    .replace(/([A-Z])/g, ' $1') 
-    .replace('bfar', 'BFAR') 
-    .trim() 
-    .toUpperCase(); 
+const DOC_LABELS: Record<string, string> = { 
+  barangayClearance: 'Barangay Clearance', 
+  cedula: 'Cedula', 
+  validID: 'Valid ID', 
+  bfarPermit: 'BFAR Permit', 
+  marinaPermit: 'Marina Permit' 
+}; 
  
  
 /* ============================================================ 
@@ -697,7 +698,7 @@ export default function AquaRegNewRegistration() {
     return ['barangayClearance', 'cedula', 'validID'];
   }
 
-  return ['barangayClearance', 'cedula', 'bfarPermit', 'marinaPermit'];
+  return ['barangayClearance', 'cedula',];
 
 }, [f.assetCategory, f.vesselType]);
  
@@ -1753,8 +1754,8 @@ export default function AquaRegNewRegistration() {
                       className="flex items-center justify-between text-xs"
                     > 
  
-                      <span className="text-slate-600 font-bold uppercase text-[9px]"> 
-                        {docLabel(key)} 
+                      <span className="text-slate-400 font-bold uppercase text-[9px]"> 
+                        {DOC_LABELS[key] || key} 
                       </span> 
  
                       { 
@@ -2142,12 +2143,38 @@ export default function AquaRegNewRegistration() {
                 </div> 
  
               </div> 
+
+              <div className="space-y-1 border-t pt-4">
+                <Label className="text-[8px] font-black uppercase text-slate-400">
+                  Vessel Name
+                </Label>
+
+                <Input
+                  value={f.vesselName}
+                  onChange={e =>
+                    up('vesselName', e.target.value)
+                  }
+                  className="h-10 text-sm font-black uppercase"
+                  placeholder="VESSEL NAME OR ASSET NAME"
+                /><Input
+  value={f.vesselName}
+  onChange={e =>
+    up('vesselName', e.target.value)
+  }
+  className="h-10 text-sm font-black uppercase"
+  placeholder={
+    ['VESSEL NAME', 'PANGULONG'].includes(f.category)
+      ? 'VESSEL NAME'
+      : ['FISHING GEAR', 'PAYAO/BALSA'].includes(f.category)
+      ? 'ASSET NAME'
+      : 'VESSEL NAME OR ASSET NAME'
+  }
+/>
+              </div>
+
+
  
             </Card> 
- 
- 
-           
- 
  
             {/* CATEGORY TABS */} 
             <Tabs 
@@ -2615,15 +2642,15 @@ export default function AquaRegNewRegistration() {
                 { 
                   activeDocKeys.map(key => { 
  
-                    const labelText = docLabel(key); 
+                    
                     const fileUrl = f.requirements[key]; 
  
                     return ( 
  
                       <div key={key} className="space-y-1"> 
  
-                        <Label className="text-[8px] font-black uppercase text-slate-600 tracking-wider"> 
-                          {labelText} 
+                        <Label className="text-[9px] font-black uppercase text-slate-500"> 
+                          {DOC_LABELS[key] || key} 
                         </Label> 
  
                         { 
