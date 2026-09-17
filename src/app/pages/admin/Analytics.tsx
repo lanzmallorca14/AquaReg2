@@ -35,6 +35,15 @@ const getAssetCategory = (record: any): SubType => {
   return 'fishing-gear';
 };
 
+// Category display config used for the per-barangay breakdown pins
+const CATEGORY_CONFIG: { key: string; label: string; icon: (props: { size?: number; className?: string }) => ReactNode; className: string }[] = [
+  { key: 'MOTORIZED', label: 'Motorized', icon: (p) => <Anchor {...p} />, className: 'text-blue-500 bg-blue-50' },
+  { key: 'NON-MOTORIZED', label: 'Non-Motorized', icon: (p) => <Ship {...p} />, className: 'text-slate-500 bg-slate-100' },
+  { key: 'FISHING-GEAR', label: 'Fishing Gear', icon: (p) => <Waves {...p} />, className: 'text-indigo-500 bg-indigo-50' },
+  { key: 'PAYAO-BALSA', label: 'Payao/Balsa', icon: (p) => <Compass {...p} />, className: 'text-emerald-500 bg-emerald-50' },
+  { key: 'PANGULONG', label: 'Pangulong', icon: (p) => <Award {...p} />, className: 'text-purple-500 bg-purple-50' },
+];
+
 // SVG Pie/Donut Chart Component
 function DetailedPieChart({ data }: { data: Record<string, number> }) {
   const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
@@ -116,6 +125,7 @@ export default function AquaRegAnalytics() {
       yearly: {} as Record<string, number>,
       typeDist: {} as Record<string, number>,
       barangayDist: {} as Record<string, number>,
+      barangayCategoryDist: {} as Record<string, Record<string, number>>,
       motorizedCount: 0,
       nonMotorizedCount: 0,
       gearCount: 0,
@@ -154,6 +164,18 @@ export default function AquaRegAnalytics() {
       const rawBarangay = v.barangay || 'Not Specified';
       const bKey = String(rawBarangay).toUpperCase();
       stats.barangayDist[bKey] = (stats.barangayDist[bKey] || 0) + 1;
+
+      // Per-barangay category pinpointing: how many of each asset type per barangay
+      if (!stats.barangayCategoryDist[bKey]) {
+        stats.barangayCategoryDist[bKey] = {
+          MOTORIZED: 0,
+          'NON-MOTORIZED': 0,
+          'FISHING-GEAR': 0,
+          'PAYAO-BALSA': 0,
+          PANGULONG: 0,
+        };
+      }
+      stats.barangayCategoryDist[bKey][tKey] = (stats.barangayCategoryDist[bKey][tKey] || 0) + 1;
 
       if (category === 'motorized') stats.motorizedCount++;
       else if (category === 'non-motorized') stats.nonMotorizedCount++;
@@ -312,7 +334,7 @@ export default function AquaRegAnalytics() {
         </Card>
       </div>
 
-      {/* --- ROW 3: DETAILED GEOGRAPHIC LEADERBOARD & METRICS --- */}
+      {/* --- ROW 3: DETAILED GEOGRAPHIC LEADERBOARD & METRICS (WITH PER-BARANGAY ASSET PINPOINTING) --- */}
       <Card className="rounded-[2.5rem] border-slate-100 shadow-2xl overflow-hidden bg-white">
         <CardHeader className="p-8 border-b bg-slate-50/50 flex flex-row items-center justify-between">
           <div className="flex items-center gap-3">
@@ -322,15 +344,16 @@ export default function AquaRegAnalytics() {
           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{sortedBarangays.length} Barangays Total</span>
         </CardHeader>
         <CardContent className="p-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
              {sortedBarangays.map(([brgy, count], idx) => {
                const percentage = approvedCount > 0 ? ((count / approvedCount) * 100).toFixed(1) : "0.0";
+               const categoryCounts = report.barangayCategoryDist[brgy] || {};
                return (
-                 <div key={brgy} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-slate-50/50 transition-all space-y-2">
+                 <div key={brgy} className="p-5 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-slate-50/50 transition-all space-y-4">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2">
                         <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[9px] font-black flex items-center justify-center">#{idx + 1}</span>
-                        <span className="text-xs font-black text-slate-800 uppercase truncate max-w-[130px]">{brgy}</span>
+                        <span className="text-xs font-black text-slate-800 uppercase truncate max-w-[180px]">{brgy}</span>
                       </div>
                       <Badge className="bg-blue-50 text-blue-700 font-black text-[10px] px-2.5 py-0.5 rounded-md">{count} Units</Badge>
                     </div>
@@ -340,6 +363,17 @@ export default function AquaRegAnalytics() {
                     </div>
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div className="h-full bg-blue-600 rounded-full" style={{ width: `${percentage}%` }} />
+                    </div>
+
+                    {/* Per-Barangay Asset Category Pinpoint */}
+                    <div className="grid grid-cols-5 gap-2 pt-2 border-t border-slate-50">
+                      {CATEGORY_CONFIG.map((cat) => (
+                        <div key={cat.key} className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2 ${cat.className}`}>
+                          {cat.icon({ size: 13 })}
+                          <span className="text-[11px] font-black text-slate-900">{categoryCounts[cat.key] || 0}</span>
+                          <span className="text-[7px] font-bold uppercase tracking-tight text-center leading-tight opacity-70">{cat.label}</span>
+                        </div>
+                      ))}
                     </div>
                  </div>
                );
