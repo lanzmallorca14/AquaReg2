@@ -2156,20 +2156,7 @@ export default function AquaRegNewRegistration() {
                   }
                   className="h-10 text-sm font-black uppercase"
                   placeholder="VESSEL NAME OR ASSET NAME"
-                /><Input
-  value={f.vesselName}
-  onChange={e =>
-    up('vesselName', e.target.value)
-  }
-  className="h-10 text-sm font-black uppercase"
-  placeholder={
-    ['VESSEL NAME', 'PANGULONG'].includes(f.category)
-      ? 'VESSEL NAME'
-      : ['FISHING GEAR', 'PAYAO/BALSA'].includes(f.category)
-      ? 'ASSET NAME'
-      : 'VESSEL NAME OR ASSET NAME'
-  }
-/>
+                />
               </div>
 
 
