@@ -2154,9 +2154,24 @@ export default function AquaRegNewRegistration() {
                   onChange={e =>
                     up('vesselName', e.target.value)
                   }
-                  className="h-10 text-sm font-black uppercase"
+                  className={`h-10 text-sm font-black uppercase ${
+                    (isDuplicate || hasInvalidFormat)
+                      ? 'border-red-500 focus-visible:ring-red-500'
+                      : ''
+                  }`}
                   placeholder="VESSEL NAME OR ASSET NAME"
                 />
+
+                {(isDuplicate || hasInvalidFormat) && (
+                  <div className="flex items-start gap-2 mt-1.5 text-red-500">
+                    <span className="text-sm leading-none">⚠</span>
+                    <p className="text-[9px] font-black uppercase leading-tight">
+                      {isDuplicate
+                        ? `This name is already used in this category (${f.assetCategory.toUpperCase()}).`
+                        : 'Vessel name must have a space before the number.'}
+                    </p>
+                  </div>
+                )}
               </div>
 
 
