@@ -2,7 +2,7 @@ import { useMemo, isValidElement, cloneElement, type ReactNode, type ReactElemen
 import { useNavigate } from 'react-router-dom';
 import { 
   Clock3, ShieldCheck, 
-  Ship, Activity, MapPin, LayoutDashboard
+  Ship, Activity, MapPin, LayoutDashboard, Bell
 } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -14,44 +14,45 @@ export default function InspectorOverview() {
   const { currentUser } = useAquaAuth();
   const { Vessels = [] } = useAquaData();
   const myInspectorId = String(
-  currentUser?.idNumber || currentUser?.id || ""
-).toUpperCase();
-
-
-  // --- DATA PROCESSING LOGIC ---
-  const stats = useMemo(() => {
-  const myInspectorId = String(
     currentUser?.idNumber || currentUser?.id || ""
   ).toUpperCase();
 
-  // ONLY vessels assigned to this inspector
-  const myTasks = Vessels.filter(v => {
-    const assignedInspector = String(
-      v.assigned_inspector || ""
+  // --- DATA PROCESSING LOGIC ---
+  const stats = useMemo(() => {
+    const inspectorId = String(
+      currentUser?.idNumber || currentUser?.id || ""
     ).toUpperCase();
 
-    return (
-      assignedInspector !== "" &&
-      assignedInspector === myInspectorId
+    // ONLY vessels assigned to this inspector
+    const myTasks = Vessels.filter(v => {
+      const assignedInspector = String(
+        v.assigned_inspector || ""
+      ).toUpperCase();
+
+      return (
+        assignedInspector !== "" &&
+        assignedInspector === inspectorId
+      );
+    });
+
+    const verified = myTasks.filter(
+      v => String(v.status).toUpperCase() === "PASSED"
+    ).length;
+
+    const scheduledTasks = myTasks.filter(v =>
+      String(v.status).toUpperCase() === "SCHEDULED"
     );
-  });
 
-  const verified = myTasks.filter(
-    v => String(v.status).toUpperCase() === "PASSED"
-  ).length;
+    const pending = myTasks.filter(v =>
+      ["SCHEDULED", "PENDING", "TO FOLLOW"].includes(
+        String(v.status).toUpperCase()
+      )
+    ).length;
 
-  const pending = myTasks.filter(v =>
-    ["SCHEDULED", "PENDING", "TO FOLLOW"].includes(
-      String(v.status).toUpperCase()
-    )
-  ).length;
-
-  const rate =
-    myTasks.length > 0
-      ? Math.round((verified / myTasks.length) * 100)
-      : 0;
-
-  // rest of your existing code...
+    const rate =
+      myTasks.length > 0
+        ? Math.round((verified / myTasks.length) * 100)
+        : 0;
 
     // Highest Barangay Registration density logic
     const barangayCounts: Record<string, number> = {};
@@ -73,8 +74,8 @@ export default function InspectorOverview() {
       })
       .slice(0, 4);
 
-    return { total: myTasks.length, verified, pending, rate, brgyData, recent };
-  }, [Vessels, myInspectorId]);
+    return { total: myTasks.length, verified, pending, rate, brgyData, recent, scheduledTasks };
+  }, [Vessels, currentUser]);
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] font-sans text-slate-900 pb-20">
@@ -97,6 +98,35 @@ export default function InspectorOverview() {
 
       <main className="max-w-[1200px] mx-auto px-6 lg:px-12 mt-12 space-y-6">
         
+        {/* SCHEDULE NOTIFICATION BANNER */}
+        {stats.scheduledTasks.length > 0 && (
+          <Card className="rounded-[2rem] border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shrink-0">
+                <Bell size={22} className="animate-bounce" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-amber-200 text-amber-800 border-none uppercase font-black text-[9px]">Action Required</Badge>
+                  <span className="text-xs font-mono font-bold text-amber-700">{stats.scheduledTasks.length} pending schedule(s)</span>
+                </div>
+                <h4 className="text-base font-black text-slate-900 uppercase italic mt-1">
+                  You have vessel inspections scheduled!
+                </h4>
+                <p className="text-xs text-slate-600 font-medium">
+                  Next up: <span className="font-bold underline">{stats.scheduledTasks[0].vessel_name || 'Unnamed Vessel'}</span> in Barangay {stats.scheduledTasks[0].barangay || 'N/A'}.
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => navigate(`/inspector/inspection/${stats.scheduledTasks[0].id}`)}
+              className="w-full sm:w-auto px-5 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase tracking-wider transition-all shadow-sm cursor-pointer shrink-0 text-center"
+            >
+              View Inspection
+            </button>
+          </Card>
+        )}
+
         {/* METRIC TILES */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <OverviewCard label="Total Assignments" value={stats.total} icon={<Ship />} color="blue" />
@@ -163,7 +193,7 @@ export default function InspectorOverview() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <Badge className={`text-[8px] font-black uppercase border-none ${v.status === 'Passed' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                    <Badge className={`text-[8px] font-black uppercase border-none ${String(v.status).toUpperCase() === 'PASSED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
                       {v.status}
                     </Badge>
                     <p className="text-[9px] font-mono font-bold text-slate-300 mt-1 uppercase">{v.id.slice(0, 8)}</p>

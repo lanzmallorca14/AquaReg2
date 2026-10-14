@@ -807,7 +807,7 @@ body {
         ${printField('Place of Inspection', addressDisplay)}
         ${printField('Date of Inspection', formatDate(coi.date_of_inspection || record.inspectionDate))}
         ${printField('Inspector Name', coi.inspector_name || record.inspectorName)}
-        ${printField('Inspector Role', coi.inspector_role || 'Fishery Law Enforcer')}
+       
       </div>
 
       <div style="margin-top:12px; margin-bottom:8px; font-size:8px; font-weight:900; text-transform:uppercase; color:#64748b;">
@@ -911,8 +911,6 @@ body {
       ${printField('Inspection Status', coi.status || record.status || 'PASSED')}
       ${printField('Date of Inspection', formatDate(coi.date_of_inspection || record.inspectionDate))}
       ${printField('Inspector Name', coi.inspector_name || record.inspectorName)}
-      ${printField('Inspector ID', coi.inspected_by || record.inspectedBy)}
-      ${printField('Inspector Role', coi.inspector_role || 'Fishery Law Enforcer')}
       ${printField('Place of Inspection', addressDisplay)}
       ${printField('Inspection Remarks', coi.remarks || record.remarks)}
       ${printField('Last Updated', formatDate(record.updatedAt))}
@@ -2167,23 +2165,11 @@ function DetailView({
           </CardWrapper>
 
           {showCOI && (
-            <CardWrapper title="Inspection & COI" icon={<ClipboardCheck size={16} />}>
+            <CardWrapper title="INSPECTION" icon={<ClipboardCheck size={16} />}>
               <InfoRow
                 label="Inspector"
                 value={coi.inspector_name || normalizedRecord.inspectorName}
                 icon={<User size={14} />}
-              />
-
-              <InfoRow
-                label="Inspector ID"
-                value={coi.inspected_by || normalizedRecord.inspectedBy}
-                icon={<Hash size={14} />}
-              />
-
-              <InfoRow
-                label="Inspector Role"
-                value={coi.inspector_role || 'Fishery Law Enforcer'}
-                icon={<BadgeCheck size={14} />}
               />
 
               <InfoRow
@@ -2211,54 +2197,7 @@ function DetailView({
         </div>
 
         <div className="lg:col-span-8 space-y-6">
-          {showCOI && (
-            <CardWrapper title="Complete COI Details" icon={<BadgeCheck size={16} />}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-                
-                <InfoRow
-                  label="Certificate No."
-                  value={coi.certificate_no || normalizedRecord.certificateNo || 'COMPLETED'}
-                  icon={<BadgeCheck size={14} />}
-                />
-
-                <InfoRow
-                  label="Owner Name"
-                  value={coi.owner_name || normalizedRecord.ownerName}
-                  icon={<User size={14} />}
-                />
-
-                <InfoRow label="Place of Inspection" value={addressDisplay || '---'} icon={<MapPin size={14} />} />
-
-                <InfoRow
-                  label="Engine Make"
-                  value={coi.engine_make || normalizedRecord.engine.make}
-                  icon={<Settings2 size={14} />}
-                />
-
-                <InfoRow
-                  label="Horse Power"
-                  value={
-                    (coi.engine_hp ?? normalizedRecord.engine.hp) !== ''
-                      ? `${displayValue(coi.engine_hp ?? normalizedRecord.engine.hp)} HP`
-                      : '---'
-                  }
-                  icon={<Settings2 size={14} />}
-                />
-
-                <InfoRow
-                  label="Serial Number"
-                  value={coi.engine_serial || normalizedRecord.engine.serial}
-                  icon={<Hash size={14} />}
-                />
-
-                <InfoRow
-                  label="Remarks"
-                  value={coi.remarks || normalizedRecord.remarks}
-                  icon={<FileText size={14} />}
-                />
-              </div>
-            </CardWrapper>
-          )}
+        
 
           {showPermitPayment && (
             <CardWrapper title="Permit / Payment" icon={<CreditCard size={16} />}>
@@ -2295,52 +2234,51 @@ function DetailView({
             </CardWrapper>
           )}
 
-          <CardWrapper title="Document Registry" icon={<FileText size={16} />}>
-            <div className={`grid gap-4 ${isVesselCategory ? 'grid-cols-3' : 'grid-cols-4'}`}>
-              {(isVesselCategory
-                ? [
-                    { label: 'Barangay Clearance', url: barangayClearanceImg },
-                    { label: 'Cedula', url: cedulaImg },
-                    { label: 'Valid ID', url: validIdImg },
-                  ]
-                : [
-                    { label: 'Barangay Clearance', url: barangayClearanceImg },
-                    { label: 'Cedula', url: cedulaImg },
-                    
-                  ]
-              ).map((docItem, idx) => (
-                <div
-                  key={idx}
-                  className="space-y-2 cursor-pointer"
-                  onClick={() => docItem.url && setViewingImage(docItem.url)}
-                >
-                  <p className="text-[9px] font-black text-slate-400 uppercase italic text-center truncate">
-                    {docItem.label}
-                  </p>
+        <CardWrapper title="Document Registry" icon={<FileText size={16} />}>
+  <div className={`grid gap-4 ${isMotorized ? 'grid-cols-3' : 'grid-cols-2'}`}>
+    {(isMotorized
+      ? [
+          { label: 'Barangay Clearance', url: barangayClearanceImg },
+          { label: 'Cedula', url: cedulaImg },
+          { label: 'Valid ID', url: validIdImg },
+        ]
+      : [
+          { label: 'Barangay Clearance', url: barangayClearanceImg },
+          { label: 'Cedula', url: cedulaImg },
+        ]
+    ).map((docItem, idx) => (
+      <div
+        key={idx}
+        className="space-y-2 cursor-pointer"
+        onClick={() => docItem.url && setViewingImage(docItem.url)}
+      >
+        <p className="text-[9px] font-black text-slate-400 uppercase italic text-center truncate">
+          {docItem.label}
+        </p>
 
-                  <div className="aspect-[3/4] rounded-2xl border bg-slate-50 overflow-hidden relative group">
-                    {docItem.url ? (
-                      <>
-                        <img
-                          src={docItem.url}
-                          alt={docItem.label}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                        />
+        <div className="aspect-[3/4] rounded-2xl border bg-slate-50 overflow-hidden relative group">
+          {docItem.url ? (
+            <>
+              <img
+                src={docItem.url}
+                alt={docItem.label}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+              />
 
-                        <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                          <Eye />
-                        </div>
-                      </>
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-200">
-                        <Box size={24} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+              <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                <Eye />
+              </div>
+            </>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-slate-200">
+              <Box size={24} />
             </div>
-          </CardWrapper>
+          )}
+        </div>
+      </div>
+    ))}
+  </div>
+</CardWrapper>
 
           <CardWrapper title="System Audit History" icon={<HistoryIcon size={16} />}>
             <div className="space-y-4">

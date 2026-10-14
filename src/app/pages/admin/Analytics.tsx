@@ -5,7 +5,7 @@ import {
   TrendingUp, Layers, 
   MapPin, Printer, Activity, Anchor, Waves,
   PieChart as PieChartIcon, FileText, CheckCircle2, AlertCircle,
-  FileCheck2, Compass, XCircle, Award, BarChart2
+  FileCheck2, Compass, XCircle, Award, BarChart2, 
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -112,6 +112,149 @@ function DetailedPieChart({ data }: { data: Record<string, number> }) {
   );
 }
 
+function FunctionalRecentRegistrationsCard({
+  vessels,
+  title,
+  icon,
+  color,
+}: {
+  vessels: any[];
+  title: string;
+  icon: ReactNode;
+  color: string;
+}) {
+  const recent = [...(vessels || [])]
+    .filter(Boolean)
+    .sort((a, b) => {
+      const aDate = new Date(a.createdAt || a.created_at || 0).getTime();
+      const bDate = new Date(b.createdAt || b.created_at || 0).getTime();
+      return bDate - aDate;
+    });
+
+  return (
+    <Card className="rounded-[2rem] border-slate-100 shadow-xl bg-white overflow-hidden flex flex-col">
+      <CardHeader className="p-5 border-b bg-slate-50/60 flex flex-row items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-slate-100">{icon}</div>
+          <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-700">{title}</CardTitle>
+        </div>
+        <Badge className={`${color} text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-full`}>
+          {recent.length} Total
+        </Badge>
+      </CardHeader>
+      <CardContent className="p-5 overflow-y-auto max-h-[340px] custom-scrollbar flex-1">
+        {recent.length === 0 ? (
+          <div className="text-center text-slate-300 text-[10px] font-bold uppercase tracking-widest py-8">No recent registrations</div>
+        ) : (
+          <div className="space-y-3">
+            {recent.map((vessel, index) => {
+              const category = getAssetCategory(vessel);
+              const fallbackName = `${category.replace('-', ' ').toUpperCase()} UNIT`;
+              const name = vessel?.vesselName || vessel?.name || vessel?.assetName || fallbackName;
+              const date = vessel?.createdAt || vessel?.created_at;
+              const displayDate = date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent';
+              const barangay = vessel?.barangay || 'Unassigned Barangay';
+
+              return (
+                <div key={vessel?.id || `${name}-${index}`} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/40 p-3 hover:bg-slate-50 transition-colors">
+                  <div className={`w-8 h-8 rounded-xl ${color} text-white flex items-center justify-center text-[10px] font-black shrink-0`}>
+                    {index + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex justify-between gap-3 items-center">
+                      <p className="text-sm font-black text-slate-800 truncate uppercase">{name}</p>
+                      <span className="text-[9px] font-bold uppercase text-slate-400 shrink-0">{displayDate}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate">{barangay}</p>
+                      <span className="text-[9px] font-black tracking-wider uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{category}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimeCard({
+  title,
+  data,
+  icon,
+  color,
+}: {
+  title: string;
+  data: Record<string, number>;
+  icon: ReactNode;
+  color: string;
+}) {
+  const entries = Object.entries(data || {}).slice(0, 6);
+  const maxValue = entries.reduce((highest, [, value]) => Math.max(highest, value || 0), 0) || 1;
+
+  return (
+    <Card className="rounded-[2rem] border-slate-100 shadow-xl bg-white overflow-hidden">
+      <CardHeader className="p-5 border-b bg-slate-50/60 flex flex-row items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-slate-100">{icon}</div>
+          <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-700">{title}</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="p-5">
+        <div className="space-y-4">
+          {entries.length === 0 ? (
+            <div className="text-center text-slate-300 text-[10px] font-bold uppercase tracking-widest py-8">No data available</div>
+          ) : (
+            entries.map(([label, value]) => (
+              <div key={label} className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</span>
+                  <span className="text-sm font-black text-slate-900 italic">{value}</span>
+                </div>
+                <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`${color} h-full rounded-full transition-all duration-700`}
+                    style={{ width: `${(value / maxValue) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function InsightCard({
+  title,
+  value,
+  icon,
+  trend,
+}: {
+  title: string;
+  value: number;
+  icon: ReactNode;
+  trend: string;
+}) {
+  return (
+    <Card className="rounded-[2rem] border-slate-100 shadow-xl bg-white overflow-hidden">
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="p-2.5 rounded-2xl bg-slate-100">{icon}</div>
+          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{trend}</span>
+        </div>
+        <div>
+          <h3 className="text-3xl font-black italic text-slate-900">{value}</h3>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">{title}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AquaRegAnalytics() {
   const context = useAquaData();
   const vessels = context?.Vessels || context?.Vessels || [];
@@ -165,7 +308,6 @@ export default function AquaRegAnalytics() {
       const bKey = String(rawBarangay).toUpperCase();
       stats.barangayDist[bKey] = (stats.barangayDist[bKey] || 0) + 1;
 
-      // Per-barangay category pinpointing: how many of each asset type per barangay
       if (!stats.barangayCategoryDist[bKey]) {
         stats.barangayCategoryDist[bKey] = {
           MOTORIZED: 0,
@@ -200,7 +342,6 @@ export default function AquaRegAnalytics() {
     );
   }
 
-  // Application Verification Counts
   const approvedVessels = vessels.filter((v: any) => {
     if (!v) return false;
     const status = String(v.status || '').toLowerCase();
@@ -219,7 +360,6 @@ export default function AquaRegAnalytics() {
   const pendingPercentage = totalCount > 0 ? ((pendingCount / totalCount) * 100).toFixed(1) : "0.0";
   const rejectedPercentage = totalCount > 0 ? ((rejectedCount / totalCount) * 100).toFixed(1) : "0.0";
 
-  // Top Barangays & Dominant Fleet
   const sortedBarangays = Object.entries(report.barangayDist).sort((a, b) => b[1] - a[1]);
   const topBarangay = sortedBarangays[0] ? sortedBarangays[0][0] : 'N/A';
   const topBarangayCount = sortedBarangays[0] ? sortedBarangays[0][1] : 0;
@@ -272,9 +412,9 @@ export default function AquaRegAnalytics() {
         </div>
       </header>
 
-      {/* --- ROW 1: REGISTRATION VELOCITY & TRAFFIC --- */}
+      {/* --- ROW 1: FUNCTIONAL REGISTRATION VELOCITY & RECENT LOGS --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <TimeCard title="Recent Registrations" data={report.daily} icon={<Clock className="text-blue-500" />} color="bg-blue-500" />
+        <FunctionalRecentRegistrationsCard vessels={approvedVessels} title="Recent Registrations" icon={<Clock className="text-blue-500" />} color="bg-blue-500" />
         <TimeCard title="Monthly Registration Volume" data={report.monthly} icon={<Calendar className="text-emerald-500" />} color="bg-emerald-500" />
         <TimeCard title="Annual Growth Patterns" data={report.yearly} icon={<TrendingUp className="text-indigo-500" />} color="bg-indigo-500" />
       </div>
@@ -334,7 +474,7 @@ export default function AquaRegAnalytics() {
         </Card>
       </div>
 
-      {/* --- ROW 3: DETAILED GEOGRAPHIC LEADERBOARD & METRICS (WITH PER-BARANGAY ASSET PINPOINTING) --- */}
+      {/* --- ROW 3: DETAILED GEOGRAPHIC LEADERBOARD & METRICS --- */}
       <Card className="rounded-[2.5rem] border-slate-100 shadow-2xl overflow-hidden bg-white">
         <CardHeader className="p-8 border-b bg-slate-50/50 flex flex-row items-center justify-between">
           <div className="flex items-center gap-3">
@@ -365,7 +505,6 @@ export default function AquaRegAnalytics() {
                       <div className="h-full bg-blue-600 rounded-full" style={{ width: `${percentage}%` }} />
                     </div>
 
-                    {/* Per-Barangay Asset Category Pinpoint */}
                     <div className="grid grid-cols-5 gap-2 pt-2 border-t border-slate-50">
                       {CATEGORY_CONFIG.map((cat) => (
                         <div key={cat.key} className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2 ${cat.className}`}>
@@ -451,17 +590,15 @@ export default function AquaRegAnalytics() {
         </CardHeader>
         <CardContent className="p-8 space-y-8 text-slate-300 print:text-slate-800 text-sm leading-relaxed">
           
-          {/* Executive Overview */}
           <div className="space-y-3">
             <h4 className="text-xs font-black uppercase tracking-widest text-blue-400 print:text-blue-600 flex items-center gap-2">
-              <FileCheck2 size={16} /> 1. Executive Summary & Registration Completion
+              <FileCheck2 size={16} />1. Executive Summary & Registration Completion
             </h4>
             <p className="text-xs">
               As of the current reporting period, the municipal database records a total volume of <strong className="text-white print:text-black">{totalCount} registered entries</strong> across all aquatic asset categories. Among these, <strong className="text-white print:text-black">{approvedCount} assets ({completionPercentage}%)</strong> have successfully completed evaluation, physical inspection, and safety verification, earning official certification. A total of <strong className="text-white print:text-black">{pendingCount} applications ({pendingPercentage}%)</strong> remain under technical review, while <strong className="text-white print:text-black">{rejectedCount} applications ({rejectedPercentage}%)</strong> were denied or flagged for non-compliance.
             </p>
           </div>
 
-          {/* Fleet Composition Analysis */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-800 print:border-slate-300">
             <div className="space-y-3">
               <h4 className="text-xs font-black uppercase tracking-widest text-blue-400 print:text-blue-600 flex items-center gap-2">
@@ -482,7 +619,6 @@ export default function AquaRegAnalytics() {
             </div>
           </div>
 
-          {/* Administrative Recommendations */}
           <div className="pt-4 border-t border-slate-800 print:border-slate-300 space-y-3">
             <h4 className="text-xs font-black uppercase tracking-widest text-blue-400 print:text-blue-600 flex items-center gap-2">
               <AlertCircle size={16} /> 4. Actionable Recommendations
@@ -494,7 +630,6 @@ export default function AquaRegAnalytics() {
             </ul>
           </div>
 
-          {/* Official Signature Footer for Printed Documents */}
           <div className="hidden print:block pt-16 mt-16 border-t border-slate-400">
             <div className="grid grid-cols-2 gap-12">
               <div>
@@ -519,59 +654,5 @@ export default function AquaRegAnalytics() {
       </Card>
 
     </div>
-  );
-}
-
-// --- REUSABLE SUB-COMPONENTS ---
-
-function TimeCard({ title, data, icon, color }: any) {
-  const entries = Object.entries(data).slice(-5).reverse();
-
-  return (
-    <Card className="rounded-[2.5rem] border-slate-100 shadow-2xl overflow-hidden hover:scale-[1.01] transition-all duration-500 bg-white">
-      <CardHeader className="p-7 bg-slate-50/50 border-b flex flex-row items-center justify-between">
-        <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-500">{title}</CardTitle>
-        <div className="p-2 bg-white rounded-xl shadow-sm">{icon}</div>
-      </CardHeader>
-      <CardContent className="p-7 space-y-5">
-        {entries.length > 0 ? entries.map(([label, count]: any) => (
-          <div key={label} className="flex justify-between items-center group">
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter group-hover:text-slate-900 transition-colors">{label}</span>
-            <div className="flex items-center gap-4">
-               <div className={`h-1.5 w-16 rounded-full opacity-20 ${color} hidden md:block`} />
-               <span className="text-2xl font-black italic text-slate-900 tracking-tighter">{count}</span>
-            </div>
-          </div>
-        )) : (
-          <div className="py-12 text-center text-[10px] font-black text-slate-300 uppercase tracking-widest">No Active Records</div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-interface InsightCardProps {
-  title: string;
-  value: string | number;
-  icon: ReactNode;
-  trend: string;
-}
-
-function InsightCard({ title, value, icon, trend }: InsightCardProps) {
-  return (
-    <Card className="rounded-[2rem] border-slate-100 shadow-xl p-6 bg-white flex flex-col justify-between hover:-translate-y-1 transition-transform">
-      <div className="flex justify-between items-start">
-        <div className="space-y-1">
-          <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">{title}</p>
-          <h3 className="text-3xl font-black italic text-slate-900">{value}</h3>
-        </div>
-        <div className="p-2.5 bg-slate-50 rounded-2xl">{icon}</div>
-      </div>
-      <div className="mt-4 pt-3 border-t border-slate-50">
-        <p className="text-[9px] font-bold text-slate-400 uppercase italic flex items-center gap-1">
-          <TrendingUp size={10} className="text-emerald-500" /> {trend}
-        </p>
-      </div>
-    </Card>
   );
 }

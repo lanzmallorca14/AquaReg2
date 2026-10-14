@@ -2144,20 +2144,30 @@ export default function AquaRegNewRegistration() {
  
               </div> 
 
-              <div className="space-y-1 border-t pt-4">
-                <Label className="text-[8px] font-black uppercase text-slate-400">
-                  Vessel Name
-                </Label>
+              
+<div className="space-y-1 border-t pt-4">
+  <Label className="text-[8px] font-black uppercase text-slate-400">
+    {String(f.assetCategory ?? '').toLowerCase().includes('vessel') ||
+     String(f.assetCategory ?? '').toLowerCase().includes('motorized') ||
+     String(f.assetCategory ?? '').toLowerCase().includes('non-motorized')
+      ? 'Vessel Name'
+      : 'Asset Name'}
+  </Label>
 
-                <Input
-                  value={f.vesselName}
-                  onChange={e =>
-                    up('vesselName', e.target.value)
-                  }
-                  className="h-10 text-sm font-black uppercase"
-                  placeholder="VESSEL NAME OR ASSET NAME"
-                />
-              </div>
+  <Input
+    value={f.vesselName}
+    onChange={e => up('vesselName', e.target.value)}
+    className="h-10 text-sm font-black uppercase"
+    placeholder={
+      String(f.assetCategory ?? '').toLowerCase().includes('vessel') ||
+      String(f.assetCategory ?? '').toLowerCase().includes('motorized') ||
+      String(f.assetCategory ?? '').toLowerCase().includes('non-motorized')
+        ? ''
+        : ''
+    }
+  />
+</div>
+
 
 
  
