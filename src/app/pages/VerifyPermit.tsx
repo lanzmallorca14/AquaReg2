@@ -36,7 +36,7 @@ export default function VerifyPermit() {
       const vId = String(v.id || v.registration_no || '').toUpperCase();
       const permitNo = String(v.permit_no || '').toUpperCase();
       const certificateNo = String(v.certificate_no || '').toUpperCase();
-      const vName = String(v.vessel_name || v.boat_name || v.name || '').toUpperCase();
+      const vName = String(v.vessel_name || v.boat_name || v.name || v.asset_name || '').toUpperCase();
       const owner = String(v.owner_name || '').toUpperCase();
       
       return (
@@ -76,6 +76,24 @@ export default function VerifyPermit() {
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value.toUpperCase());
+  };
+
+  // Helper to determine asset category label dynamically
+  const getNameLabel = (data: any) => {
+    const rawType = String(
+      data.asset_category || data.type || data.vessel_type || data.category || ''
+    ).toLowerCase();
+
+    if (
+      rawType.includes('pangulong') || 
+      rawType.includes('gear') || 
+      rawType.includes('fishing') || 
+      rawType.includes('payao') || 
+      rawType.includes('balsa')
+    ) {
+      return 'Asset Name';
+    }
+    return 'Vessel Name';
   };
 
   return (
@@ -146,18 +164,13 @@ export default function VerifyPermit() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
                     <ResultItem label="Registry ID" value={verificationResult.data.id || verificationResult.data.registration_no} highlight />
                     <ResultItem label="Owner Name" value={verificationResult.data.owner_name} />
-                    <ResultItem label="Vessel/Asset Name" value={verificationResult.data.vessel_name || verificationResult.data.boat_name} />
+                    <ResultItem 
+                      label={getNameLabel(verificationResult.data)} 
+                      value={verificationResult.data.vessel_name || verificationResult.data.boat_name || verificationResult.data.asset_name || verificationResult.data.name} 
+                    />
                     
                     <ResultItem label="Category" value={verificationResult.data.asset_category || verificationResult.data.type} color="text-blue-600" />
-                    <ResultItem label="Home Barangay" value={verificationResult.data.barangay} />
                     <ResultItem label="Status" value={verificationResult.data.status || 'ACTIVE'} />
-
-                    <div className="col-span-full border-t border-slate-100 pt-10 grid grid-cols-2 md:grid-cols-4 gap-6">
-                        <ResultItem label="Length" value={verificationResult.data.hull_length ? `${verificationResult.data.hull_length}m` : '0.00m'} />
-                        <ResultItem label="Breadth" value={verificationResult.data.hull_width ? `${verificationResult.data.hull_width}m` : '0.00m'} />
-                        <ResultItem label="Gross Tonnage" value={verificationResult.data.tonnage_gross ? `${verificationResult.data.tonnage_gross} GT` : '0.00 GT'} />
-                        <ResultItem label="Net Tonnage" value={verificationResult.data.tonnage_net ? `${verificationResult.data.tonnage_net} NT` : '0.00 NT'} />
-                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -175,7 +188,7 @@ export default function VerifyPermit() {
                   <CardContent className="p-10 text-center space-y-4">
                     <ResultItem label="Asset ID" value={verificationResult.data.id || verificationResult.data.registration_no} highlight color="text-amber-600" />
                     <p className="text-slate-500 font-medium text-sm">
-                      This registration for <span className="font-black uppercase italic text-slate-800">{verificationResult.data.vessel_name || verificationResult.data.boat_name}</span> has been flagged as <span className="text-amber-600 font-black">Expired</span> in Agriculture Database. 
+                      This registration for <span className="font-black uppercase italic text-slate-800">{verificationResult.data.vessel_name || verificationResult.data.boat_name || verificationResult.data.asset_name || verificationResult.data.name}</span> has been flagged as <span className="text-amber-600 font-black">Expired</span> in Agriculture Database. 
                       Operating this unit without renewal constitutes a violation of Municipal Ordinance.
                     </p>
                   </CardContent>
