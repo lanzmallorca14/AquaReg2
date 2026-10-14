@@ -1046,7 +1046,7 @@ export default function Homepage() {
                 }
                 className="flex items-center justify-center gap-3 px-8 py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-black uppercase tracking-widest text-sm transition-all shadow-lg active:scale-95 w-full sm:w-auto border border-white/20"
               >
-                REGISTER VESSEL 
+                REGISTER NOW!
               </button>
 
 

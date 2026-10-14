@@ -13,9 +13,6 @@ export default function InspectorOverview() {
   const navigate = useNavigate();
   const { currentUser } = useAquaAuth();
   const { Vessels = [] } = useAquaData();
-  const myInspectorId = String(
-    currentUser?.idNumber || currentUser?.id || ""
-  ).toUpperCase();
 
   // --- DATA PROCESSING LOGIC ---
   const stats = useMemo(() => {
