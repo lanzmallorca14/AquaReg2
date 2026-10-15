@@ -474,33 +474,14 @@ const DOC_LABELS: Record<string, string> = {
   cedula: 'Cedula', 
   validID: 'Valid ID', 
   bfarPermit: 'BFAR Permit', 
-  marinaPermit: 'Marina Permit' 
+  marinaPermit: 'Marina Permit',
+  pastPermit: 'Past Permit'
 }; 
  
  
 /* ============================================================ 
    DUPLICATE NAME HELPERS
 ============================================================ */
-
-/*
-  IMPORTANT:
-
-  Rejected records are intentionally ignored by duplicate checking.
-
-  Example:
-
-  Existing:
-    SEA QUEEN 1 -> Pending       => BLOCK
-    SEA QUEEN 1 -> Passed        => BLOCK
-    SEA QUEEN 1 -> Registered    => BLOCK
-    SEA QUEEN 1 -> Rejected      => ALLOW
-
-  This applies to both:
-    1. Local Vessels data
-    2. Online Supabase data
-
-  The comparison is still category-specific.
-*/
 
 const normalizeDuplicateName = (value: any): string => {
   return String(value || '')
@@ -535,9 +516,6 @@ const isDuplicateAssetName = (
   currentId?: string | null
 ): boolean => {
 
-  /*
-    REJECTED RECORDS NEVER COUNT AS DUPLICATES.
-  */
   if (isRejectedStatus(asset?.status)) {
     return false;
   }
@@ -612,7 +590,9 @@ export default function AquaRegNewRegistration() {
     showReceipt: false, 
     isPreparingReceipt: false, 
  
-    pendingId: null as string | null 
+    pendingId: null as string | null,
+    renewalViolationBlocked: false,
+    originalRecordStatus: ''
   }); 
  
   const [f, setF] = useState({ 
@@ -658,9 +638,6 @@ export default function AquaRegNewRegistration() {
   ); 
  
  
- 
- 
- 
   /* ==========================================================  
      INVALID VESSEL NAME FORMAT 
   ========================================================== */ 
@@ -682,25 +659,31 @@ export default function AquaRegNewRegistration() {
  
  
   /* ==========================================================  
-     ACTIVE DOCUMENTS 
+     ACTIVE DOCUMENTS (INCLUDES PAST PERMIT FOR RENEWAL OR GENERAL)
   ========================================================== */ 
  
   const activeDocKeys = useMemo(() => {
 
-  if (f.assetCategory === 'vessel') {
-
-    // Non-motorized vessels do NOT require Valid ID.
-    if (f.vesselType === 'non-motorized') {
-      return ['barangayClearance', 'cedula'];
+    if (s.mode === 'RENEWAL') {
+      if (f.assetCategory === 'vessel') {
+        if (f.vesselType === 'non-motorized') {
+          return ['barangayClearance', 'cedula', 'pastPermit'];
+        }
+        return ['barangayClearance', 'cedula', 'validID', 'pastPermit'];
+      }
+      return ['barangayClearance', 'cedula', 'pastPermit'];
     }
 
-    // Motorized vessels still require Valid ID.
-    return ['barangayClearance', 'cedula', 'validID'];
-  }
+    if (f.assetCategory === 'vessel') {
+      if (f.vesselType === 'non-motorized') {
+        return ['barangayClearance', 'cedula'];
+      }
+      return ['barangayClearance', 'cedula', 'validID'];
+    }
 
-  return ['barangayClearance', 'cedula',];
+    return ['barangayClearance', 'cedula'];
 
-}, [f.assetCategory, f.vesselType]);
+  }, [f.assetCategory, f.vesselType, s.mode]);
  
  
   /* ==========================================================  
@@ -717,6 +700,12 @@ export default function AquaRegNewRegistration() {
       toast.error('Record Not Found'); 
       return; 
     } 
+
+    const recordStatus = String(existing.status || '').trim().toUpperCase();
+    if (recordStatus === 'BLACKPATCH' || recordStatus === 'REVOKED') {
+      toast.error('Renewal Denied: Vessel has active revocation or blacklist flags.');
+      return;
+    }
  
     const existingCategory = String( 
       existing.asset_category || existing.type || 'vessel' 
@@ -732,7 +721,11 @@ export default function AquaRegNewRegistration() {
           } 
         : parseOwnerNameParts(existing.owner_name || ''); 
  
-    setS(prev => ({ ...prev, id: existing.id })); 
+    setS(prev => ({ 
+      ...prev, 
+      id: existing.id,
+      originalRecordStatus: recordStatus
+    })); 
  
     setF(prev => ({ 
       ...prev, 
@@ -742,51 +735,44 @@ export default function AquaRegNewRegistration() {
       ownerLastName: nameParts.lastName, 
       ownerSuffix: nameParts.suffix, 
  
-      ownerAge: String(existing.owner_age ?? ''), 
-      vesselName: existing.vessel_name ?? '', 
-      barangay: existing.barangay ?? '', 
-      sitio: existing.sitio ?? '', 
-      phone: existing.cp_number ?? '', 
+      // Retain Vessel name and Asset name, clear other details per request
+      ownerAge: '', 
+      vesselName: existing.vessel_name || existing.gear_type || existing.boat_name || existing.name || '', 
+      barangay: '', 
+      sitio: '', 
+      phone: '', 
  
       assetCategory: existingCategory, 
  
       vesselType: existing.is_motorized ? 'motorized' : 'non-motorized', 
  
-      gearType: existing.gear_type ?? '', 
+      gearType: '', 
  
-      length: String(existing.hull_length ?? ''), 
-      width: String(existing.hull_width ?? ''), 
-      depth: String(existing.hull_depth ?? ''), 
+      length: '', 
+      width: '', 
+      depth: '', 
  
-      grossTonnage: String(existing.tonnage_gross ?? '0.00'), 
-      netTonnage: String(existing.tonnage_net ?? '0.00'), 
+      grossTonnage: '0.00', 
+      netTonnage: '0.00', 
  
-      unitCount: String( 
-        existing.unit_count ?? 
-        existing.number_of_units ?? 
-        existing.number_of_boats ?? 
-        '1' 
-      ), 
+      unitCount: '1', 
  
-      payaoVesselName: String( 
-        existing.payao_vessel_name ?? existing.boat_owner_vessel_name ?? '' 
-      ).toUpperCase(), 
+      payaoVesselName: '', 
+      payaoNumbers: '', 
  
-      payaoNumbers: String( 
-        existing.payao_numbers ?? existing.boat_name ?? '' 
-      ), 
- 
+      // All document scans removed/cleared on renewal
       requirements: { 
-        barangayClearance: existing.barangay_clearance || null, 
-        cedula: existing.cedula || null, 
-        validID: existing.valid_id || null, 
-        bfarPermit: existing.bfar_permit || null, 
-        marinaPermit: existing.marina_permit || null 
+        barangayClearance: null, 
+        cedula: null, 
+        validID: null, 
+        bfarPermit: null, 
+        marinaPermit: null,
+        pastPermit: null
       } 
     })); 
  
     toast.success('Record Found', { 
-      description: 'Existing data pre-filled.' 
+      description: 'Owner name and asset name retained. Scans and form details cleared for renewal.' 
     }); 
   }; 
  
@@ -975,12 +961,6 @@ export default function AquaRegNewRegistration() {
  
       try { 
  
-        /*
-          LOCAL CHECK
-
-          Rejected records are explicitly ignored by
-          isDuplicateAssetName().
-        */
         const foundLocally = Vessels.some((v: any) => 
           isDuplicateAssetName(
             v,
@@ -997,12 +977,6 @@ export default function AquaRegNewRegistration() {
  
         if (navigator.onLine) { 
  
-          /*
-            ONLINE CHECK
-
-            Include status in the query result so rejected
-            records can be excluded.
-          */
           const { data, error } = await supabase 
             .from('Vessels') 
             .select(
@@ -1193,16 +1167,6 @@ export default function AquaRegNewRegistration() {
     const trimmedName = f.vesselName.trim().toUpperCase(); 
     const category = f.assetCategory; 
  
-    /* ====================================================  
-       FINAL DUPLICATE CHECK
-
-       IMPORTANT:
-       REJECTED records are ignored here as well.
-
-       This prevents a rejected application from blocking
-       a new application using the same asset/vessel name.
-    ==================================================== */ 
- 
     if (
       shouldCheckDuplicateName &&
       trimmedName
@@ -1217,12 +1181,6 @@ export default function AquaRegNewRegistration() {
         )
       ); 
  
-      /*
-        If the live duplicate state is true, we still block.
-        However, that state can only become true from a
-        non-rejected matching record because the duplicate
-        checks above exclude Rejected records.
-      */
       if (isAlreadyTaken || isDuplicate) { 
  
         toast.error( 
@@ -1323,9 +1281,10 @@ export default function AquaRegNewRegistration() {
         valid_id: f.requirements.validID, 
         bfar_permit: f.requirements.bfarPermit, 
         marina_permit: f.requirements.marinaPermit, 
+        past_permit: f.requirements.pastPermit,
  
         status: 'Pending', 
-        rejection_reason: null 
+        rejection_reason: null
       }; 
  
       console.log('PAYLOAD:', payload); 
@@ -1847,8 +1806,6 @@ export default function AquaRegNewRegistration() {
                 Official Registry 
               </Badge> 
  
-            
- 
             </div> 
  
           </div> 
@@ -1884,8 +1841,8 @@ export default function AquaRegNewRegistration() {
  
         { 
           s.mode === 'RENEWAL' && ( 
-            <Card className="p-6 rounded-3xl border-2 border-blue-600/20 bg-blue-50/30"> 
- 
+            <Card className="p-6 rounded-3xl border-2 border-blue-600/20 bg-blue-50/30 space-y-4"> 
+
               <div className="flex flex-col md:flex-row gap-4 items-end"> 
  
                 <div className="flex-1 space-y-1"> 
@@ -1925,7 +1882,7 @@ export default function AquaRegNewRegistration() {
                 </Button> 
  
               </div> 
- 
+
             </Card> 
           ) 
         } 
@@ -2145,32 +2102,23 @@ export default function AquaRegNewRegistration() {
               </div> 
 
               
-<div className="space-y-1 border-t pt-4">
-  <Label className="text-[8px] font-black uppercase text-slate-400">
-    {String(f.assetCategory ?? '').toLowerCase().includes('vessel') ||
-     String(f.assetCategory ?? '').toLowerCase().includes('motorized') ||
-     String(f.assetCategory ?? '').toLowerCase().includes('non-motorized')
-      ? 'Vessel Name'
-      : 'Asset Name'}
-  </Label>
+              <div className="space-y-1 border-t pt-4">
+                <Label className="text-[8px] font-black uppercase text-slate-400">
+                  {String(f.assetCategory ?? '').toLowerCase().includes('vessel') ||
+                   String(f.assetCategory ?? '').toLowerCase().includes('motorized') ||
+                   String(f.assetCategory ?? '').toLowerCase().includes('non-motorized')
+                    ? 'Vessel Name'
+                    : 'Asset Name'}
+                </Label>
 
-  <Input
-    value={f.vesselName}
-    onChange={e => up('vesselName', e.target.value)}
-    className="h-10 text-sm font-black uppercase"
-    placeholder={
-      String(f.assetCategory ?? '').toLowerCase().includes('vessel') ||
-      String(f.assetCategory ?? '').toLowerCase().includes('motorized') ||
-      String(f.assetCategory ?? '').toLowerCase().includes('non-motorized')
-        ? ''
-        : ''
-    }
-  />
-</div>
+                <Input
+                  value={f.vesselName}
+                  onChange={e => up('vesselName', e.target.value)}
+                  className="h-10 text-sm font-black uppercase"
+                  placeholder=""
+                />
+              </div>
 
-
-
- 
             </Card> 
  
             {/* CATEGORY TABS */} 
@@ -2510,40 +2458,39 @@ export default function AquaRegNewRegistration() {
                           </div> 
  
                           {f.assetCategory === 'vessel' && f.vesselType === 'motorized' && (
-  <div className="col-span-full flex justify-center">
-    <div className="grid grid-cols-2 gap-12 text-center">
-      
-      {/* Gross Tonnage */}
-      <div>
-        <p className="text-[9px] font-black uppercase text-blue-500 mb-1">
-          Gross Tonnage
-        </p>
+                            <div className="col-span-full flex justify-center">
+                              <div className="grid grid-cols-2 gap-12 text-center">
+                                
+                                <div>
+                                  <p className="text-[9px] font-black uppercase text-blue-500 mb-1">
+                                    Gross Tonnage
+                                  </p>
 
-        <p className="text-3xl font-black text-slate-900 italic tracking-tighter">
-          {f.grossTonnage}
-          <span className="text-[10px] not-italic text-slate-400">
-            {' '}GT
-          </span>
-        </p>
-      </div>
+                                  <p className="text-3xl font-black text-slate-900 italic tracking-tighter">
+                                    {f.grossTonnage}
+                                    <span className="text-[10px] not-italic text-slate-400">
+                                      {' '}GT
+                                    </span>
+                                  </p>
+                                </div>
 
-      {/* Net Tonnage */}
-      <div>
-        <p className="text-[9px] font-black uppercase text-blue-500 mb-1">
-          Net Tonnage
-        </p>
+                                <div>
+                                  <p className="text-[9px] font-black uppercase text-blue-500 mb-1">
+                                    Net Tonnage
+                                  </p>
 
-        <p className="text-3xl font-black text-slate-900 italic tracking-tighter">
-          {f.netTonnage}
-          <span className="text-[10px] not-italic text-slate-400">
-            {' '}NT
-          </span>
-        </p>
-      </div>
+                                  <p className="text-3xl font-black text-slate-900 italic tracking-tighter">
+                                    {f.netTonnage}
+                                    <span className="text-[10px] not-italic text-slate-400">
+                                      {' '}NT
+                                    </span>
+                                  </p>
+                                </div>
 
-    </div>
-  </div>
-)}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="p-4 bg-slate-50/80 rounded-2xl grid grid-cols-3 gap-3 mt-4"> 
  
                             { 
@@ -2597,13 +2544,14 @@ export default function AquaRegNewRegistration() {
           {/* RIGHT */} 
           <div className="lg:col-span-4 space-y-4"> 
  
+            {/* NOTICE UPDATED FROM ATTENTION REQUIRED */}
             { 
               errs.length > 0 && ( 
  
                 <div className="p-4 bg-red-50 border border-red-100 rounded-2xl space-y-2"> 
  
                   <p className="text-[10px] font-black text-red-500 uppercase"> 
-                    Attention Required: 
+                    Notice: 
                   </p> 
  
                   <ul className="text-[8px] font-bold text-red-400 uppercase list-disc list-inside"> 
@@ -2639,7 +2587,6 @@ export default function AquaRegNewRegistration() {
                 { 
                   activeDocKeys.map(key => { 
  
-                    
                     const fileUrl = f.requirements[key]; 
  
                     return ( 
@@ -2768,21 +2715,21 @@ export default function AquaRegNewRegistration() {
  
  
             {/* SUBMIT */} 
-           <Button
-  disabled={
-    errs.length > 0 ||
-    s.proc === 1 ||
-    s.isPreparingReceipt
-  }
-  onClick={handleOpenReceipt}
-  className="w-full h-14 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-black text-xs uppercase rounded-2xl tracking-widest shadow-xl shadow-blue-500/20"
->
-  {
-    s.isPreparingReceipt
-      ? 'Preparing Receipt...'
-      : 'Review & Submit'
-  }
-</Button>
+            <Button
+              disabled={
+                errs.length > 0 ||
+                s.proc === 1 ||
+                s.isPreparingReceipt
+              }
+              onClick={handleOpenReceipt}
+              className="w-full h-14 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-black text-xs uppercase rounded-2xl tracking-widest shadow-xl shadow-blue-500/20"
+            >
+              {
+                s.isPreparingReceipt
+                  ? 'Preparing Receipt...'
+                  : 'Review & Submit'
+              }
+            </Button>
  
           </div> 
  

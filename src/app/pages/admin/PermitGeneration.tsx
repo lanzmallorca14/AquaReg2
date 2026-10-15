@@ -32,7 +32,8 @@ import {
   FileText,
   Settings2,
   Check,
-  Trash2
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 
 import { useAquaData } from '../../components/context/AquaRegCONTEXT';
@@ -448,7 +449,7 @@ export default function ManualPermitPortal() {
 
 
   /* ============================================================
-     VERIFIED LIST
+     VERIFIED LIST (Bypasses hiddenCards for newly registered or passed assets, ensuring re-registered official numbers appear)
   ============================================================ */
 
   const verifiedList = useMemo(
@@ -463,6 +464,8 @@ export default function ManualPermitPortal() {
               String(
                 v?.status || ""
               ).toUpperCase()
+            ) || Boolean(
+              (v as unknown as Record<string, unknown>).past_permit
             )
         ),
 
@@ -475,16 +478,27 @@ export default function ManualPermitPortal() {
               String(
                 p?.status || ""
               ).toUpperCase()
+            ) || Boolean(
+              (p as unknown as Record<string, unknown>).past_permit
             )
         )
 
       ].filter(item => {
 
+        const record = item as unknown as Record<string, unknown>;
         const id = String(
-          (item as any).asset_id ||
-          (item as any).id ||
+          record.asset_id ||
+          record.id ||
           ""
         );
+
+        const isRenewal = Boolean(record.past_permit);
+        const statusStr = String(record.status || "").toUpperCase();
+
+        // If it's a renewal or newly marked passed/registered, ignore local hidden filters so erased/reassigned numbers reappear
+        if (isRenewal || statusStr === "PASSED" || statusStr === "REGISTERED") {
+          return true;
+        }
 
         return !hiddenCards.includes(
           id
@@ -1085,13 +1099,6 @@ vesselName:
 
   /* ============================================================
      OPEN PERMIT MODAL
-
-     EVERY asset category — vessel or not, with or without a
-     passed COI — now goes straight to the same Payment Auth
-     modal, and the OR Number is always typed in manually.
-     Nothing is pre-filled, locked, or gated by the COI record
-     anymore. isCOIValidated() is kept in the file (retained,
-     per request) but is no longer called here.
   ============================================================ */
 
   const handleOpenModal =
@@ -1106,9 +1113,6 @@ vesselName:
 
 
       if (!selected) return;
-
-
-      /* ALL CATEGORIES: open Payment Auth with a blank, editable OR field */
 
       setSelectedVesselId(
         id
@@ -1130,9 +1134,6 @@ vesselName:
 
   /* ============================================================
      CONFIRM OR
-
-     Only reached from the vessel flow now, so isOrLocked will
-     always be true here (kept as-is for safety/clarity).
   ============================================================ */
 
   const handleConfirmOr =
@@ -1193,143 +1194,95 @@ vesselName:
 
 
   /* ============================================================
-     FINISH EDIT
+     FINISH EDIT + SYNC PERMIT FEE
   ============================================================ */
 
- /* ============================================================
-   FINISH EDIT + SYNC PERMIT FEE
-============================================================ */
+  const handleFinishEdit = async () => {
+    try {
+      if (!vesselId) return;
 
-const handleFinishEdit = async () => {
-  try {
-    if (!vesselId) return;
+      const cleanPermitFee = Number(
+        String(data.permitFee || "0").replace(/,/g, "")
+      );
 
-    /* -----------------------------------------
-       CLEAN PERMIT FEE
-    ----------------------------------------- */
+      if (Number.isNaN(cleanPermitFee)) {
+        toast.error("Invalid permit fee.");
+        return;
+      }
 
-    const cleanPermitFee = Number(
-      String(data.permitFee || "0").replace(/,/g, "")
-    );
+      await updateVessel(vesselId, {
+        boat_name: data.boatName,
+        number_of_boats: data.numberOfBoats,
+        units_in_words: data.unitsInWords,
+        permit_fee: String(cleanPermitFee),
+        gear_type: data.gearCategory,
+      });
 
-    if (Number.isNaN(cleanPermitFee)) {
-      toast.error("Invalid permit fee.");
-      return;
-    }
-
-    /* -----------------------------------------
-       UPDATE VESSEL
-       gear_type belongs here
-    ----------------------------------------- */
-
-    await updateVessel(vesselId, {
-      boat_name: data.boatName,
-      number_of_boats: data.numberOfBoats,
-      units_in_words: data.unitsInWords,
-      permit_fee: String(cleanPermitFee),
-      gear_type: data.gearCategory,
-    });
-
-    /* -----------------------------------------
-       FIND EXISTING PERMIT
-    ----------------------------------------- */
-
-    const {
-      data: existingPermit,
-      error: permitFindError,
-    } = await supabase
-      .from("permit_management")
-      .select("id")
-      .eq("asset_id", vesselId)
-      .limit(1)
-      .maybeSingle();
-
-    if (permitFindError) {
-      throw permitFindError;
-    }
-
-    /* -----------------------------------------
-       UPDATE PERMIT MANAGEMENT
-       ONLY use columns that exist
-    ----------------------------------------- */
-
-    if (existingPermit?.id) {
       const {
-        error: permitUpdateError,
+        data: existingPermit,
+        error: permitFindError,
       } = await supabase
         .from("permit_management")
-        .update({
-          permit_fee: cleanPermitFee,
-        })
-        .eq("id", existingPermit.id);
+        .select("id")
+        .eq("asset_id", vesselId)
+        .limit(1)
+        .maybeSingle();
 
-      if (permitUpdateError) {
-        throw permitUpdateError;
+      if (permitFindError) {
+        throw permitFindError;
       }
+
+      if (existingPermit?.id) {
+        const {
+          error: permitUpdateError,
+        } = await supabase
+          .from("permit_management")
+          .update({
+            permit_fee: cleanPermitFee,
+          })
+          .eq("id", existingPermit.id);
+
+        if (permitUpdateError) {
+          throw permitUpdateError;
+        }
+      }
+
+      setData(prev => ({
+        ...prev,
+        permitFee: cleanPermitFee.toLocaleString("en-US"),
+      }));
+
+      const {
+        data: refreshedPermits,
+        error: refreshError,
+      } = await supabase
+        .from("permit_management")
+        .select("*");
+
+      if (refreshError) {
+        throw refreshError;
+      }
+
+      setPermits(refreshedPermits || []);
+
+      setIsEditable(false);
+
+      toast.success(
+        "Permit details and fee successfully synced."
+      );
+
+    } catch (error) {
+      console.error("SYNC ERROR:", error);
+
+      toast.error(
+        "Failed to sync permit details."
+      );
     }
-
-    /* -----------------------------------------
-       UPDATE LOCAL STATE
-       Layout changes immediately
-    ----------------------------------------- */
-
-    setData(prev => ({
-      ...prev,
-      permitFee: cleanPermitFee.toLocaleString("en-US"),
-    }));
-
-    /* -----------------------------------------
-       REFRESH PERMIT DATA
-    ----------------------------------------- */
-
-    const {
-      data: refreshedPermits,
-      error: refreshError,
-    } = await supabase
-      .from("permit_management")
-      .select("*");
-
-    if (refreshError) {
-      throw refreshError;
-    }
-
-    setPermits(refreshedPermits || []);
-
-    /* -----------------------------------------
-       FINISH
-    ----------------------------------------- */
-
-    setIsEditable(false);
-
-    toast.success(
-      "Permit details and fee successfully synced."
-    );
-
-  } catch (error) {
-    console.error("SYNC ERROR:", error);
-
-    toast.error(
-      "Failed to sync permit details."
-    );
-  }
-};
+  };
 
 
   /* ============================================================
      EXPORT WPS / PDF
-     ------------------------------------------------------------
-     IMPORTANT:
-     Do NOT depend on Tailwind's generated CSS being available to
-     html2canvas's cloned document. Vercel/production builds can
-     produce different stylesheet timing/order than localhost.
-
-     We therefore:
-       1. Clone the visible permit.
-       2. Inline every computed style into the clone.
-       3. Give the clone fixed paper dimensions.
-       4. Wait for fonts/images.
-       5. Capture the styled clone.
-     This keeps the localhost appearance when deployed to Vercel.
   ============================================================ */
 
   const handleExportWPS = async () => {
@@ -1348,10 +1301,6 @@ const handleFinishEdit = async () => {
         id: "wps-export"
       });
 
-      /* ----------------------------------------------------------
-         PAPER SIZE
-      ---------------------------------------------------------- */
-
       const isCertificate = isVesselType;
 
       const pageWidth = isCertificate ? 215.9 : 210;
@@ -1367,10 +1316,6 @@ const handleFinishEdit = async () => {
         pageHeight * MM_TO_PX
       );
 
-      /* ----------------------------------------------------------
-         WAIT FOR FONTS
-      ---------------------------------------------------------- */
-
       if ("fonts" in document) {
         try {
           await document.fonts.ready;
@@ -1382,10 +1327,6 @@ const handleFinishEdit = async () => {
         }
       }
 
-      /* ----------------------------------------------------------
-         WAIT FOR THE ORIGINAL ELEMENT TO FINISH LAYOUT
-      ---------------------------------------------------------- */
-
       await new Promise<void>(resolve => {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -1394,20 +1335,12 @@ const handleFinishEdit = async () => {
         });
       });
 
-      /* ----------------------------------------------------------
-         DEEP CLONE
-         ---------------------------------------------------------- */
-
       exportHost =
         printElement.cloneNode(true) as HTMLElement;
 
       exportHost.removeAttribute("id");
       exportHost.id = "permit-document-export";
 
-      /*
-       * Keep the clone in the DOM because html2canvas needs a real
-       * rendered element. Put it far outside the visible page.
-       */
       exportHost.style.position = "fixed";
       exportHost.style.left = "-100000px";
       exportHost.style.top = "0";
@@ -1434,14 +1367,6 @@ const handleFinishEdit = async () => {
       exportHost.style.color = "#000000";
       exportHost.style.zIndex = "-1";
 
-      /* ----------------------------------------------------------
-         INLINE COMPUTED STYLES
-
-         This is the key Vercel fix. Every Tailwind-generated
-         property is converted to an inline style so html2canvas
-         does not have to resolve production CSS again.
-      ---------------------------------------------------------- */
-
       const inlineComputedStyles = (
         source: Element,
         target: Element
@@ -1457,10 +1382,6 @@ const handleFinishEdit = async () => {
             sourceHTMLElement
           );
 
-        /*
-         * Copy every computed CSS property.
-         * Inline styles have higher priority than Tailwind classes.
-         */
         for (let i = 0; i < computed.length; i++) {
           const property =
             computed.item(i);
@@ -1480,15 +1401,10 @@ const handleFinishEdit = async () => {
               priority
             );
           } catch {
-            /* Ignore individual unsupported CSS properties. */
+            // Ignore
           }
         }
 
-        /*
-         * Force the clone to remain visible.
-         * Some production/print CSS may contain display/visibility
-         * rules that html2canvas would otherwise inherit.
-         */
         targetHTMLElement.style.setProperty(
           "visibility",
           "visible",
@@ -1540,18 +1456,10 @@ const handleFinishEdit = async () => {
         }
       };
 
-      /*
-       * First copy all computed styles from the original screen
-       * version. This preserves the exact localhost appearance.
-       */
       inlineComputedStyles(
         printElement,
         exportHost
       );
-
-      /* ----------------------------------------------------------
-         RE-APPLY PAPER GEOMETRY AFTER COPYING COMPUTED STYLES
-      ---------------------------------------------------------- */
 
       exportHost.style.position = "fixed";
       exportHost.style.left = "-100000px";
@@ -1575,13 +1483,6 @@ const handleFinishEdit = async () => {
       exportHost.style.opacity = "1";
       exportHost.style.backgroundColor = "#ffffff";
 
-      /* ----------------------------------------------------------
-         REMOVE RESPONSIVE/PRINT BEHAVIOR FROM THE EXPORT ROOT
-
-         The export is already styled inline. These classes can
-         otherwise react to Vercel's viewport during capture.
-      ---------------------------------------------------------- */
-
       exportHost.classList.remove(
         "md:w-80",
         "md:p-12",
@@ -1590,14 +1491,6 @@ const handleFinishEdit = async () => {
         "print:m-0",
         "print:bg-transparent"
       );
-
-      /* ----------------------------------------------------------
-         PREPARE IMAGES
-
-         Keep image URLs intact but explicitly request CORS on the
-         cloned images. This is especially important for deployed
-         Vercel -> Supabase Storage images.
-      ---------------------------------------------------------- */
 
       const clonedImages =
         Array.from(
@@ -1615,16 +1508,9 @@ const handleFinishEdit = async () => {
         img.style.opacity = "1";
       });
 
-      /*
-       * Append only after all export styling has been applied.
-       */
       document.body.appendChild(
         exportHost
       );
-
-      /* ----------------------------------------------------------
-         WAIT FOR IMAGES
-      ---------------------------------------------------------- */
 
       await Promise.all(
         clonedImages.map(
@@ -1678,10 +1564,6 @@ const handleFinishEdit = async () => {
         )
       );
 
-      /* ----------------------------------------------------------
-         WAIT FOR FINAL CLONE LAYOUT
-      ---------------------------------------------------------- */
-
       await new Promise<void>(resolve => {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -1690,52 +1572,23 @@ const handleFinishEdit = async () => {
         });
       });
 
-      /* ----------------------------------------------------------
-         CAPTURE
-      ---------------------------------------------------------- */
-
       const canvas =
         await html2canvas(
           exportHost,
           {
             scale: 2,
-
             useCORS: true,
-
             allowTaint: false,
-
-            backgroundColor:
-              "#ffffff",
-
+            backgroundColor: "#ffffff",
             logging: false,
-
-            width:
-              captureWidth,
-
-            height:
-              captureHeight,
-
-            /*
-             * Use the paper viewport, not the user's browser
-             * viewport. Because all important styles are inline,
-             * responsive Tailwind rules cannot destroy the layout.
-             */
-            windowWidth:
-              captureWidth,
-
-            windowHeight:
-              captureHeight,
-
+            width: captureWidth,
+            height: captureHeight,
+            windowWidth: captureWidth,
+            windowHeight: captureHeight,
             scrollX: 0,
-
             scrollY: 0,
-
-            imageTimeout:
-              20000,
-
-            removeContainer:
-              true,
-
+            imageTimeout: 20000,
+            removeContainer: true,
             onclone: (
               clonedDocument
             ) => {
@@ -1810,9 +1663,6 @@ const handleFinishEdit = async () => {
                 "important"
               );
 
-              /*
-               * Re-assert visibility on every descendant.
-               */
               const allElements =
                 clonedElement.querySelectorAll(
                   "*"
@@ -1862,22 +1712,14 @@ const handleFinishEdit = async () => {
           }
         );
 
-      /* ----------------------------------------------------------
-         CREATE PDF
-      ---------------------------------------------------------- */
-
       const pdf =
         new jsPDF({
-          orientation:
-            "portrait",
-
+          orientation: "portrait",
           unit: "mm",
-
           format: [
             pageWidth,
             pageHeight
           ],
-
           compress: true
         });
 
@@ -1897,10 +1739,6 @@ const handleFinishEdit = async () => {
         undefined,
         "FAST"
       );
-
-      /* ----------------------------------------------------------
-         FILE NAME
-      ---------------------------------------------------------- */
 
       const fileName =
         isCertificate
@@ -1930,10 +1768,6 @@ const handleFinishEdit = async () => {
       );
 
     } finally {
-      /*
-       * Always remove the temporary clone.
-       * This prevents memory/layout buildup after repeated exports.
-       */
       if (exportHost?.parentNode) {
         exportHost.parentNode.removeChild(
           exportHost
@@ -2067,8 +1901,6 @@ const handleFinishEdit = async () => {
         }
 
 
-        
-
         /* ======================================================
            OFFICIAL NUMBER
         ====================================================== */
@@ -2181,7 +2013,7 @@ const handleFinishEdit = async () => {
 
           qr_generated_at:
             generatedQrAt,
-};
+        };
 
 
         /* ======================================================
@@ -2460,6 +2292,8 @@ const handleFinishEdit = async () => {
                       ''
                     );
 
+                  const isRenewal = Boolean(record.past_permit);
+
 
                   return (
 
@@ -2468,7 +2302,7 @@ const handleFinishEdit = async () => {
                       className="border-none rounded-[2rem] bg-white shadow-xl hover:shadow-2xl transition-all group overflow-hidden"
                     >
 
-                      <div className="h-2 bg-blue-600 w-full" />
+                      <div className={`h-2 w-full ${isRenewal ? 'bg-purple-600' : 'bg-blue-600'}`} />
 
 
                       <CardContent className="p-8 space-y-4">
@@ -2476,7 +2310,7 @@ const handleFinishEdit = async () => {
 
                         <div className="flex justify-between items-start">
 
-                          <div className="p-3 bg-slate-50 rounded-2xl text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                          <div className={`p-3 rounded-2xl transition-colors ${isRenewal ? 'bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white' : 'bg-slate-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
 
                             {assetCat.includes(
                               'PAYAO'
@@ -2505,13 +2339,19 @@ const handleFinishEdit = async () => {
                           </div>
 
 
-                          <div className="bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase px-2 py-1 flex items-center gap-1">
+                          <div className={`rounded-lg text-[9px] font-black uppercase px-2 py-1 flex items-center gap-1 ${isRenewal ? 'bg-purple-50 text-purple-600' : 'bg-emerald-50 text-emerald-600'}`}>
 
-                            <CheckCircle2
-                              size={10}
-                            />
-
-                            Verified
+                            {isRenewal ? (
+                              <>
+                                <RefreshCw size={10} />
+                                Renewal
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 size={10} />
+                                Verified
+                              </>
+                            )}
 
                           </div>
 
@@ -2843,7 +2683,6 @@ const handleFinishEdit = async () => {
   onChange={e => {
     const rawValue = e.target.value.replace(/,/g, "");
 
-    // Allow only numbers and decimal point
     if (!/^\d*\.?\d*$/.test(rawValue)) {
       return;
     }
@@ -3844,7 +3683,6 @@ const handleFinishEdit = async () => {
                       </div>
                       ) : subType === "PANGULONG" ? (
 
-  /* PANGULONG */
   <div className="text-center">
 
     <p className="text-3xl font-black uppercase italic text-black whitespace-nowrap">
@@ -3946,7 +3784,6 @@ const handleFinishEdit = async () => {
                 <div className="max-w-xl mx-auto space-y-2 pt-0 -mt-8 text-center text-xs font-bold font-sans uppercase tracking-tighter leading-relaxed">
 
 
-             {/* ORDINANCE / LEGAL BASIS */}
 {(() => {
   const type = String(subType || "").toUpperCase().trim();
 
@@ -4072,9 +3909,6 @@ const handleFinishEdit = async () => {
 
               </div>
 
-
-
-           
 
               {/* FOOTER SLOGAN */}
 

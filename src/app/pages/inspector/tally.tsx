@@ -17,6 +17,7 @@ import {
   Zap,
   Clipboard,
   Layers,
+  RefreshCw,
 } from 'lucide-react';
 
 import {
@@ -72,6 +73,11 @@ interface Vessel {
   engine_serial?: string | null;
 
   remarks?: string | null;
+
+  /*
+   * Renewal flag
+   */
+  past_permit?: string | null;
 }
 
 /* =========================================================
@@ -253,23 +259,6 @@ export default function InspectionRecords() {
       Array.isArray(Vessels)
         ? Vessels
         : [];
-
-    /*
-     * IMPORTANT:
-     *
-     * We DO NOT filter by:
-     *
-     * status === "Passed"
-     *
-     * and we DO NOT require:
-     *
-     * OR number
-     *
-     * anymore.
-     *
-     * Any record assigned/inspected by the current inspector
-     * will appear here.
-     */
 
     return safeVessels
       .filter((vessel) =>
@@ -461,78 +450,88 @@ export default function InspectionRecords() {
 
           ) : (
 
-            records.map((record) => (
+            records.map((record) => {
+              const isRenewal = Boolean(record.past_permit);
 
-              <Card
-                key={record.id}
-                className="p-3 rounded-2xl border-none shadow-sm hover:shadow-md transition-all bg-white cursor-pointer"
-                onClick={() =>
-                  setSelectedRecord(record)
-                }
-              >
+              return (
 
-                <div className="flex items-center gap-4">
+                <Card
+                  key={record.id}
+                  className="p-3 rounded-2xl border-none shadow-sm hover:shadow-md transition-all bg-white cursor-pointer"
+                  onClick={() =>
+                    setSelectedRecord(record)
+                  }
+                >
 
-                  {/* ICON */}
+                  <div className="flex items-center gap-4">
 
-                  <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    {/* ICON */}
 
-                    <Ship size={20} />
+                    <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
 
-                  </div>
-
-                  {/* INFORMATION */}
-
-                  <div className="flex-1 min-w-0">
-
-                    <div className="flex items-center gap-2 mb-0.5">
-
-                      <h3 className="font-black text-slate-900 uppercase italic truncate text-[12px]">
-                        {record.vessel_name ||
-                          'Unnamed Vessel'}
-                      </h3>
-
-                      <Badge className="bg-blue-100 text-blue-700 h-4 text-[7px] font-black uppercase px-1.5 border-none">
-                        {record.type ||
-                          'VESSEL'}
-                      </Badge>
+                      <Ship size={20} />
 
                     </div>
 
-                    <div className="flex flex-wrap gap-3 text-[10px] text-slate-400 font-bold uppercase">
+                    {/* INFORMATION */}
 
-                      <span className="flex items-center gap-1">
-                        <User size={10} />
-                        {record.owner_name ||
-                          'UNKNOWN OWNER'}
-                      </span>
+                    <div className="flex-1 min-w-0">
 
-                      {record.or_number && (
-                        <span className="text-emerald-600 font-black italic">
-                          O.R. #{record.or_number}
+                      <div className="flex items-center gap-2 mb-0.5">
+
+                        <h3 className="font-black text-slate-900 uppercase italic truncate text-[12px]">
+                          {record.vessel_name ||
+                            'Unnamed Vessel'}
+                        </h3>
+
+                        <Badge className="bg-blue-100 text-blue-700 h-4 text-[7px] font-black uppercase px-1.5 border-none">
+                          {record.type ||
+                            'VESSEL'}
+                        </Badge>
+
+                        {isRenewal && (
+                          <Badge className="bg-purple-100 text-purple-700 h-4 text-[7px] font-black uppercase px-1.5 border-none flex items-center gap-0.5">
+                            <RefreshCw size={8} /> Renewal Record
+                          </Badge>
+                        )}
+
+                      </div>
+
+                      <div className="flex flex-wrap gap-3 text-[10px] text-slate-400 font-bold uppercase">
+
+                        <span className="flex items-center gap-1">
+                          <User size={10} />
+                          {record.owner_name ||
+                            'UNKNOWN OWNER'}
                         </span>
-                      )}
 
-                      {record.status && (
-                        <span className="text-blue-500 font-black italic">
-                          {record.status}
-                        </span>
-                      )}
+                        {record.or_number && (
+                          <span className="text-emerald-600 font-black italic">
+                            O.R. #{record.or_number}
+                          </span>
+                        )}
+
+                        {record.status && (
+                          <span className="text-blue-500 font-black italic">
+                            {record.status}
+                          </span>
+                        )}
+
+                      </div>
 
                     </div>
 
+                    <ChevronRight
+                      size={16}
+                      className="text-slate-300 shrink-0"
+                    />
+
                   </div>
 
-                  <ChevronRight
-                    size={16}
-                    className="text-slate-300 shrink-0"
-                  />
+                </Card>
 
-                </div>
-
-              </Card>
-
-            ))
+              );
+            })
 
           )}
 
@@ -571,14 +570,19 @@ export default function InspectionRecords() {
                     <ShieldCheck size={16} />
 
                     <p className="text-[8px] font-black uppercase tracking-widest">
-                      Official Audit Record
+                      Official Audit Record {selectedRecord.past_permit ? '• Renewed Record Update' : ''}
                     </p>
 
                   </div>
 
-                  <h2 className="text-xl font-black italic uppercase tracking-tight leading-none">
+                  <h2 className="text-xl font-black italic uppercase tracking-tight leading-none flex items-center gap-2">
                     {selectedRecord.vessel_name ||
                       'Unnamed Vessel'}
+                    {selectedRecord.past_permit && (
+                      <span className="bg-purple-500/30 text-purple-200 border border-purple-400/30 px-2 py-0.5 rounded text-[9px]">
+                        RENEWED
+                      </span>
+                    )}
                   </h2>
 
                 </div>
@@ -659,6 +663,26 @@ export default function InspectionRecords() {
                   />
 
                 </div>
+
+                {/* =================================================
+                    RENEWAL NOTIFICATION / PAST PERMIT NOTICE
+                ================================================= */}
+
+                {selectedRecord.past_permit && (
+                  <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl flex items-start gap-3">
+                    <div className="h-10 w-10 bg-purple-100 text-purple-700 rounded-xl flex items-center justify-center shrink-0 border border-purple-200">
+                      <RefreshCw size={18} />
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-black uppercase text-purple-800 tracking-wider">
+                        Renewal Record Update Notice
+                      </p>
+                      <p className="text-[10px] font-medium text-purple-700 mt-0.5">
+                        This existing record was successfully updated via permit renewal. The past permit has been re-verified and associated with this updated archive profile.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* =================================================
                     INSPECTOR SECURITY DATA

@@ -2,7 +2,7 @@ import { useMemo, isValidElement, cloneElement, type ReactNode, type ReactElemen
 import { useNavigate } from 'react-router-dom';
 import { 
   Clock3, ShieldCheck, 
-  Ship, Activity, MapPin, LayoutDashboard, Bell
+  Ship, Activity, MapPin, LayoutDashboard, Bell, RefreshCw
 } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -112,6 +112,11 @@ export default function InspectorOverview() {
                 </h4>
                 <p className="text-xs text-slate-600 font-medium">
                   Next up: <span className="font-bold underline">{stats.scheduledTasks[0].vessel_name || 'Unnamed Vessel'}</span> in Barangay {stats.scheduledTasks[0].barangay || 'N/A'}.
+                  {Boolean((stats.scheduledTasks[0] as any)?.past_permit) && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-purple-700 font-black uppercase text-[10px]">
+                      <RefreshCw size={10} /> (Renewal Application)
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -170,33 +175,43 @@ export default function InspectorOverview() {
             </div>
             
             <div className="divide-y divide-slate-100">
-              {stats.recent.map((v) => (
-                <div 
-                  key={v.id} 
-                  className="py-4 flex items-center justify-between group cursor-pointer" 
-                  onClick={() => navigate(`/inspector/inspection/${v.id}`)}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                      <Ship size={18} />
+              {stats.recent.map((v) => {
+                const isRenewal = Boolean((v as any)?.past_permit);
+                return (
+                  <div 
+                    key={v.id} 
+                    className="py-4 flex items-center justify-between group cursor-pointer" 
+                    onClick={() => navigate(`/inspector/inspection/${v.id}`)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                        <Ship size={18} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-black uppercase italic text-slate-900 leading-none">
+                            {v.vessel_name || 'Unnamed Vessel'}
+                          </p>
+                          {isRenewal && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-purple-100 text-purple-700">
+                              <RefreshCw size={8} /> Renewal
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
+                          Owner: {v.owner_name}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-black uppercase italic text-slate-900 leading-none">
-                        {v.vessel_name || 'Unnamed Vessel'}
-                      </p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
-                        Owner: {v.owner_name}
-                      </p>
+                    <div className="text-right">
+                      <Badge className={`text-[8px] font-black uppercase border-none ${String(v.status).toUpperCase() === 'PASSED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                        {v.status}
+                      </Badge>
+                      <p className="text-[9px] font-mono font-bold text-slate-300 mt-1 uppercase">{v.id.slice(0, 8)}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <Badge className={`text-[8px] font-black uppercase border-none ${String(v.status).toUpperCase() === 'PASSED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-                      {v.status}
-                    </Badge>
-                    <p className="text-[9px] font-mono font-bold text-slate-300 mt-1 uppercase">{v.id.slice(0, 8)}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               
               {stats.recent.length === 0 && (
                 <div className="py-12 text-center flex flex-col items-center">

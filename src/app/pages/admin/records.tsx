@@ -29,6 +29,7 @@ import {
   CreditCard,
   Hash,
   QrCode,
+  RefreshCw,
 } from 'lucide-react';
 
 import { Badge } from '../../components/ui/badge';
@@ -590,8 +591,6 @@ const printRecord = (rawRecord: any) => {
 
   const validId = docs.validID || docs.valid_id || record.valid_id || '';
 
- 
-
   const isVessel = isVesselCategoryOf(category);
   const showPermitPayment = showsPermitPayment(category);
 
@@ -599,10 +598,7 @@ const printRecord = (rawRecord: any) => {
     { name: 'Barangay Clearance', value: barangayClearance },
     { name: 'Cedula', value: cedula },
     { name: 'Valid ID', value: validId },
-    ...(isVessel
-      ? []
-      : [
-        ]),
+    ...(isVessel ? [] : []),
   ];
 
   const documentImages = documentRows
@@ -1105,7 +1101,7 @@ export default function RecordsPage() {
         const status = String(v.status || '').toUpperCase();
 
         const isPassedOrRegistered =
-          status === 'PASSED' || status === 'REGISTERED' || status === 'READY';
+          status === 'PASSED' || status === 'REGISTERED' || status === 'READY' || Boolean(v.past_permit);
 
         if (!isPassedOrRegistered) {
           return false;
@@ -1287,7 +1283,8 @@ function RegistryView({
                       ''
                     : '';
 
-                  
+                  const isRenewal = Boolean(record.past_permit);
+
                   return (
                     <tr
                       key={record.id}
@@ -1301,9 +1298,16 @@ function RegistryView({
                           </div>
 
                           <div>
-                            <span className="block text-sm font-black text-slate-800 uppercase leading-none">
-                              {record.vesselName || record.name || record.gearType || 'Unnamed Asset'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="block text-sm font-black text-slate-800 uppercase leading-none">
+                                {record.vesselName || record.name || record.gearType || 'Unnamed Asset'}
+                              </span>
+                              {isRenewal && (
+                                <Badge className="bg-purple-50 text-purple-600 border-none font-black text-[8px] px-1.5 py-0.5 flex items-center gap-1">
+                                  <RefreshCw size={8} /> Renewal
+                                </Badge>
+                              )}
+                            </div>
                             <span className="text-[10px] font-mono font-bold text-slate-400 italic">
                               {record.id}
                             </span>
@@ -1913,8 +1917,6 @@ function DetailView({
   const cedulaImg = docs.cedula || normalizedRecord.cedula || null;
 
   const validIdImg = docs.validID || docs.valid_id || normalizedRecord.valid_id || null;
-
-  
 
   return (
     <div className="space-y-8 animate-in slide-in-from-right duration-500 pb-20 relative">

@@ -13,6 +13,7 @@ import {
   Hash,
   Database,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 
 /* ============================================================
@@ -44,6 +45,7 @@ interface PermitVerification {
   verification_status: string | null;
 
   qr_token?: string | null;
+  past_permit?: any | null;
 }
 
 /* ============================================================
@@ -364,7 +366,8 @@ export default function VerifyPermit() {
               asset_category,
               expiration_date,
               verification_status,
-              qr_token
+              qr_token,
+              past_permit
             `
           )
           .eq("qr_token", normalizedToken)
@@ -568,6 +571,8 @@ export default function VerifyPermit() {
   const isRevoked =
     verificationResult === "REVOKED";
 
+  const isRenewal = Boolean(permit.past_permit);
+
   /* ============================================================
      STATUS COLORS
   ============================================================ */
@@ -604,10 +609,11 @@ export default function VerifyPermit() {
     "This certificate has not been verified as a passed permit.";
 
   if (isValid) {
-    statusTitle = "VALID PERMIT";
+    statusTitle = isRenewal ? "VALID RENEWED PERMIT" : "VALID PERMIT";
 
-    statusDescription =
-      "This permit is registered and currently valid in the AquaReg database.";
+    statusDescription = isRenewal
+      ? "This permit has been successfully renewed and is currently valid in the AquaReg database."
+      : "This permit is registered and currently valid in the AquaReg database.";
   }
 
   if (isExpired) {
@@ -660,7 +666,7 @@ export default function VerifyPermit() {
           {/* LIVE DATABASE BADGE */}
 
           {isLiveConfirmed && (
-            <div className="mt-5 flex justify-center">
+            <div className="mt-5 flex justify-center gap-2">
               <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-400/30 rounded-full px-4 py-2">
                 <Database
                   size={13}
@@ -671,6 +677,19 @@ export default function VerifyPermit() {
                   Live Database Confirmed
                 </span>
               </div>
+
+              {isRenewal && (
+                <div className="inline-flex items-center gap-2 bg-purple-500/10 border border-purple-400/30 rounded-full px-4 py-2">
+                  <RefreshCw
+                    size={13}
+                    className="text-purple-400 animate-spin"
+                  />
+
+                  <span className="text-[9px] font-black uppercase tracking-widest text-purple-300">
+                    Renewal Record
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -787,6 +806,14 @@ export default function VerifyPermit() {
                 ) || "N/A"
               }
             />
+
+            {isRenewal && (
+              <InfoRow
+                icon={<RefreshCw size={18} />}
+                label="Renewal Status"
+                value="RENEWED RECORD"
+              />
+            )}
           </div>
 
           {/* ====================================================

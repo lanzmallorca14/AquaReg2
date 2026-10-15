@@ -262,14 +262,6 @@ const matchesSearch = (
    OWNER NAME COMPARISON
 ========================================================= */
 
-/**
- * Normalizes owner names before comparison so harmless formatting
- * differences do not prevent a match.
- *
- * Examples:
- * "Juan Dela Cruz" == "JUAN  DELA-CRUZ"
- * "Maria, Santos" == "Maria Santos"
- */
 const normalizeOwnerName = (value: any): string => {
   return String(value || '')
     .toLowerCase()
@@ -378,9 +370,7 @@ export default function AuditQueuePage(
   }, []);
 
   /* =======================================================
-     PENDING QUEUE
-
-     Only Pending records are shown here.
+     PENDING QUEUE (INCLUDES RENEWAL & NEW AUDIT REQUESTS)
   ======================================================= */
 
   const queue = useMemo(() => {
@@ -441,18 +431,6 @@ export default function AuditQueuePage(
       searchQuery,
     ]);
 
-  /* =======================================================
-     OWNER NAME MATCH NOTICE
-
-     Compare the owner name in:
-       Applications Awaiting Audit
-     against:
-       Rejection Notices
-
-     A match means this owner has a previous rejection notice.
-     The application itself is NOT blocked or changed automatically.
-  ======================================================= */
-
   const rejectedOwnerNames = useMemo(() => {
     const names = new Set<string>();
 
@@ -504,18 +482,6 @@ export default function AuditQueuePage(
     );
   };
 
-  /* =======================================================
-     DELETE REJECTION NOTICE + ORIGINAL APPLICATION
-
-     Deleting a rejection notice permanently removes:
-
-     1. RejectionNotices row
-     2. Original Vessels row
-
-     This makes the registration ID available for a
-     completely new future registration.
-  ======================================================= */
-
   const handleDeleteRejectionNotice =
     async (
       notice: RejectionNotice
@@ -540,7 +506,6 @@ export default function AuditQueuePage(
           `This will permanently remove BOTH:\n` +
           `• The Rejection Notice\n` +
           `• The original Audit/Vessels application\n\n` +
-          `The application ID will then become available for a future client.\n\n` +
           `THIS ACTION CANNOT BE UNDONE.`
         );
 
@@ -551,14 +516,9 @@ export default function AuditQueuePage(
       try {
         if (!originalId) {
           throw new Error(
-            'This rejection notice does not contain original_vessel_id. The original application cannot be safely identified.'
+            'This rejection notice does not contain original_vessel_id.'
           );
         }
-
-        /* =================================================
-           STEP 1
-           Verify original application exists.
-        ================================================= */
 
         const {
           data: originalApplication,
@@ -575,11 +535,6 @@ export default function AuditQueuePage(
         if (lookupError) {
           throw lookupError;
         }
-
-        /* =================================================
-           STEP 2
-           Permanently delete original application.
-        ================================================= */
 
         if (originalApplication) {
           if (
@@ -606,11 +561,6 @@ export default function AuditQueuePage(
           }
         }
 
-        /* =================================================
-           STEP 3
-           Permanently delete rejection notice.
-        ================================================= */
-
         const {
           error: noticeDeleteError,
         } = await supabase
@@ -625,11 +575,6 @@ export default function AuditQueuePage(
           throw noticeDeleteError;
         }
 
-        /* =================================================
-           STEP 4
-           Remove notice from local state.
-        ================================================= */
-
         setRejectionNotices(
           (current) =>
             current.filter(
@@ -638,11 +583,6 @@ export default function AuditQueuePage(
                 String(notice.id)
             )
         );
-
-        /* =================================================
-           STEP 5
-           Close popup if necessary.
-        ================================================= */
 
         if (
           selectedVessel &&
@@ -656,7 +596,7 @@ export default function AuditQueuePage(
           'Rejection permanently deleted',
           {
             description:
-              `Application ${originalId} and its rejection notice were permanently removed. The ID is now available for a future registration.`,
+              `Application ${originalId} and its rejection notice were permanently removed.`,
           }
         );
 
@@ -677,10 +617,6 @@ export default function AuditQueuePage(
         );
       }
     };
-
-  /* =======================================================
-     MANUAL DELETE OF PENDING / AUDIT APPLICATION
-  ======================================================= */
 
   const handleDeleteAuditRecord =
     async (vessel: any) => {
@@ -723,7 +659,7 @@ export default function AuditQueuePage(
           'Audit application deleted',
           {
             description:
-              `Application ${vessel.id} was permanently removed. Its registration ID is now available for reuse.`,
+              `Application ${vessel.id} was permanently removed.`,
           }
         );
       } catch (error: any) {
@@ -743,10 +679,6 @@ export default function AuditQueuePage(
       }
     };
 
-  /* =======================================================
-     LOADING
-  ======================================================= */
-
   if (
     loading ||
     loadingNotices
@@ -762,16 +694,8 @@ export default function AuditQueuePage(
     );
   }
 
-  /* =======================================================
-     PAGE
-  ======================================================= */
-
   return (
     <div className="relative space-y-6 animate-in fade-in duration-700 font-sans p-6 pt-10 bg-slate-50/30 min-h-screen">
-
-      {/* =================================================
-          HEADER
-      ================================================= */}
 
       <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col lg:flex-row justify-between items-center gap-4">
 
@@ -798,8 +722,6 @@ export default function AuditQueuePage(
           </div>
         </div>
 
-        {/* SEARCH */}
-
         <div className="relative flex-1 lg:max-w-md">
 
           <Search
@@ -820,10 +742,6 @@ export default function AuditQueuePage(
         </div>
       </div>
 
-      {/* =================================================
-          PENDING APPLICATIONS
-      ================================================= */}
-
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
 
         <div className="px-8 py-5 bg-slate-900 flex items-center gap-3">
@@ -834,7 +752,7 @@ export default function AuditQueuePage(
           />
 
           <p className="text-[10px] font-black text-white uppercase tracking-widest">
-            Applications Awaiting Audit
+            Applications Awaiting Audit (New & Renewals)
           </p>
         </div>
 
@@ -880,8 +798,6 @@ export default function AuditQueuePage(
                       className="group hover:bg-slate-50/80 transition-all"
                     >
 
-                      {/* ASSET */}
-
                       <td className="px-8 py-6">
 
                         <div className="flex items-center gap-4">
@@ -913,9 +829,12 @@ export default function AuditQueuePage(
 
                           <div>
 
-                            <div className="font-black italic text-slate-900 uppercase tracking-tight">
-                              {getAssetDisplayName(
-                                v
+                            <div className="font-black italic text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                              {getAssetDisplayName(v)}
+                              {v.past_permit && (
+                                <Badge className="bg-purple-100 text-purple-700 text-[8px] font-black">
+                                  RENEWAL
+                                </Badge>
                               )}
                             </div>
 
@@ -928,8 +847,6 @@ export default function AuditQueuePage(
                         </div>
 
                       </td>
-
-                      {/* OWNER */}
 
                       <td className="px-8 py-6">
                         <div className="text-xs font-black text-slate-700 uppercase italic">
@@ -961,8 +878,6 @@ export default function AuditQueuePage(
                         )}
                       </td>
 
-                      {/* CATEGORY */}
-
                       <td className="px-8 py-6 text-center">
 
                         <Badge className="bg-blue-100 text-blue-600 border-none rounded-md text-[9px] font-black uppercase px-3">
@@ -970,8 +885,6 @@ export default function AuditQueuePage(
                         </Badge>
 
                       </td>
-
-                      {/* ACTION */}
 
                       <td className="px-8 py-6">
 
@@ -1030,18 +943,6 @@ export default function AuditQueuePage(
           </table>
         </div>
       </div>
-
-      {/* =================================================
-          REJECTION NOTICES
-
-          Rejected applications are represented here.
-
-          AUDIT AGAIN:
-          Rejected -> Pending -> Audit Queue
-
-          DELETE:
-          Rejected -> permanently deleted
-      ================================================= */}
 
       <div className="bg-white rounded-[2.5rem] border border-red-100 shadow-xl overflow-hidden">
 
@@ -1123,8 +1024,6 @@ export default function AuditQueuePage(
                       className="hover:bg-red-50/30 transition-all"
                     >
 
-                      {/* APPLICATION */}
-
                       <td className="px-8 py-6">
 
                         <div className="flex items-center gap-4">
@@ -1160,8 +1059,6 @@ export default function AuditQueuePage(
 
                       </td>
 
-                      {/* OWNER */}
-
                       <td className="px-8 py-6">
 
                         <p className="text-xs font-black uppercase italic text-slate-700">
@@ -1183,8 +1080,6 @@ export default function AuditQueuePage(
 
                       </td>
 
-                      {/* CATEGORY */}
-
                       <td className="px-8 py-6">
 
                         <Badge className="bg-red-100 text-red-700 border-none rounded-md text-[9px] font-black uppercase px-3">
@@ -1197,8 +1092,6 @@ export default function AuditQueuePage(
                         </Badge>
 
                       </td>
-
-                      {/* NOTICE */}
 
                       <td className="px-8 py-6 max-w-md">
 
@@ -1232,8 +1125,6 @@ export default function AuditQueuePage(
 
                       </td>
 
-                      {/* DATE */}
-
                       <td className="px-8 py-6">
 
                         <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500">
@@ -1252,13 +1143,9 @@ export default function AuditQueuePage(
 
                       </td>
 
-                      {/* ACTION */}
-
                       <td className="px-8 py-6">
 
                         <div className="flex items-center justify-end gap-2">
-
-                          {/* DELETE */}
 
                           <Button
                             type="button"
@@ -1323,10 +1210,6 @@ export default function AuditQueuePage(
 
       </div>
 
-      {/* =================================================
-          AUDIT POPUP
-      ================================================= */}
-
       {selectedVessel && (
         <AuditDetailPopup
           vessel={selectedVessel}
@@ -1375,10 +1258,6 @@ function AuditDetailPopup({
       .split('T')[0]
   );
 
-  /* =======================================================
-     REJECTION
-  ======================================================= */
-
   const [
     rejectionReason,
     setRejectionReason,
@@ -1396,10 +1275,6 @@ function AuditDetailPopup({
     setIsSubmittingRejection,
   ] = useState(false);
 
-  /* =======================================================
-     CATEGORY
-  ======================================================= */
-
   const isPangulong =
     isPangulongCategory(vessel);
 
@@ -1408,10 +1283,6 @@ function AuditDetailPopup({
 
   const isPayao =
     isPayaoCategory(vessel);
-
-  /* =======================================================
-     MOTOR / NON-MOTOR
-  ======================================================= */
 
   const isMotorizedVessel =
     isVesselCategory(vessel) &&
@@ -1436,10 +1307,6 @@ function AuditDetailPopup({
   const gearCategory =
     isGearCategory(vessel);
 
-  /* =======================================================
-     DISPLAY NAME
-  ======================================================= */
-
   const displayVesselName =
     useMemo(
       () =>
@@ -1450,39 +1317,19 @@ function AuditDetailPopup({
     );
 
   /* =======================================================
-     DOCUMENT REQUIREMENTS
-
-     Gear categories use:
-     - BFAR Permit
-     - MARINA Permit
-     - Barangay Clearance
-     - Cedula
-
-     Vessel categories use:
-     - Barangay Clearance
-     - Valid ID
-     - Cedula
+     DOCUMENT REQUIREMENTS (INCLUDES PAST PERMIT FOR RENEWALS)
   ======================================================= */
 
   const activeDocKeys =
     useMemo(() => {
+      const isRenewal = Boolean(vessel.past_permit || vessel.requirements?.pastPermit);
+      
       if (gearCategory) {
-        return [
-          'barangayClearance',
-          'cedula',
-        ];
+        return isRenewal ? ['barangayClearance', 'cedula', 'pastPermit'] : ['barangayClearance', 'cedula'];
       }
 
-      return [
-        'barangayClearance',
-        'validID',
-        'cedula',
-      ];
-    }, [gearCategory]);
-
-  /* =======================================================
-     ACTIVE PERSONNEL
-  ======================================================= */
+      return isRenewal ? ['barangayClearance', 'validID', 'cedula', 'pastPermit'] : ['barangayClearance', 'validID', 'cedula'];
+    }, [gearCategory, vessel]);
 
   const activePersonnel =
     useMemo(() => {
@@ -1498,16 +1345,6 @@ function AuditDetailPopup({
           'approved'
       );
     }, [inspectors]);
-
-  /* =======================================================
-     PROCEED
-
-     Gear/PAYAO/PANGULONG:
-       Direct Pass
-
-     Vessel:
-       Schedule Inspection
-  ======================================================= */
 
   const handleProceed =
     async () => {
@@ -1560,18 +1397,6 @@ function AuditDetailPopup({
       setPhase('schedule');
     };
 
-  /* =======================================================
-     REJECT
-
-     Rejection does NOT delete the application.
-
-       Vessels:
-         status = Rejected
-
-       RejectionNotices:
-         new historical notice
-  ======================================================= */
-
   const handleRejectSubmission =
     async () => {
       if (!rejectionReason) {
@@ -1589,11 +1414,6 @@ function AuditDetailPopup({
       try {
         const rejectionTimestamp =
           new Date().toISOString();
-
-        /* =================================================
-           STEP 1
-           Create rejection notice.
-        ================================================= */
 
         const {
           error: noticeError,
@@ -1642,12 +1462,6 @@ function AuditDetailPopup({
           throw noticeError;
         }
 
-        /* =================================================
-           STEP 2
-           KEEP original Vessels record.
-           Only change its status.
-        ================================================= */
-
         if (
           typeof updateVesselStatus !==
           'function'
@@ -1682,7 +1496,7 @@ function AuditDetailPopup({
           {
             description:
               error?.message ||
-              'The rejection notice could not be saved or the application status could not be updated.',
+              'The rejection notice could not be saved.',
           }
         );
       } finally {
@@ -1691,10 +1505,6 @@ function AuditDetailPopup({
         );
       }
     };
-
-  /* =======================================================
-     FINAL SCHEDULE
-  ======================================================= */
 
   const handleFinalSchedule =
     async () => {
@@ -1758,10 +1568,6 @@ function AuditDetailPopup({
       }
     };
 
-  /* =======================================================
-     DELETE FROM POPUP
-  ======================================================= */
-
   const handleDeleteAuditRecord =
     async () => {
       const confirmed =
@@ -1800,7 +1606,7 @@ function AuditDetailPopup({
           'Audit application deleted',
           {
             description:
-              `Application ${vessel.id} was permanently removed and its ID is available for reuse.`,
+              `Application ${vessel.id} was permanently removed.`,
           }
         );
       } catch (error: any) {
@@ -1819,10 +1625,6 @@ function AuditDetailPopup({
         );
       }
     };
-
-  /* =======================================================
-     TECHNICAL SPECS
-  ======================================================= */
 
   const renderTechnicalSpecs =
     () => {
@@ -1946,25 +1748,15 @@ function AuditDetailPopup({
       );
     };
 
-  /* =======================================================
-     MODAL
-  ======================================================= */
-
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-
-      {/* BACKDROP */}
 
       <div
         className="absolute inset-0 bg-slate-950/90 backdrop-blur-md"
         onClick={onClose}
       />
 
-      {/* MODAL */}
-
       <div className="relative bg-white w-full max-w-7xl h-[92vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
-
-        {/* HEADER */}
 
         <div className="bg-slate-900 p-8 text-white flex justify-between items-center shrink-0">
 
@@ -1980,9 +1772,16 @@ function AuditDetailPopup({
 
             <div>
 
-              <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">
-                {displayVesselName}
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">
+                  {displayVesselName}
+                </h2>
+                {vessel.past_permit && (
+                  <Badge className="bg-purple-600 text-white text-[10px] font-black">
+                    RENEWAL AUDIT
+                  </Badge>
+                )}
+              </div>
 
               <div className="mt-2">
 
@@ -2035,22 +1834,12 @@ function AuditDetailPopup({
 
         </div>
 
-        {/* CONTENT */}
-
         <div className="flex-1 overflow-y-auto p-10 bg-slate-50/50">
-
-          {/* =================================================
-              REVIEW
-          ================================================= */}
 
           {phase === 'review' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
 
-              {/* LEFT */}
-
               <div className="lg:col-span-4 space-y-6">
-
-                {/* OWNER */}
 
                 <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm">
 
@@ -2130,8 +1919,6 @@ function AuditDetailPopup({
 
                 </div>
 
-                {/* CATEGORY DETAILS */}
-
                 {(isPangulong ||
                   isFishingGear ||
                   isPayao) && (
@@ -2189,11 +1976,7 @@ function AuditDetailPopup({
                   </div>
                 )}
 
-                {/* TECHNICAL */}
-
                 {renderTechnicalSpecs()}
-
-                {/* TONNAGE */}
 
                 {isMotorizedVessel && (
                   <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
@@ -2244,8 +2027,6 @@ function AuditDetailPopup({
                   </div>
                 )}
 
-                {/* ACTIONS */}
-
                 <div className="space-y-3">
 
                   <Button
@@ -2289,8 +2070,6 @@ function AuditDetailPopup({
 
               </div>
 
-              {/* DOCUMENT VAULT */}
-
               <div className="lg:col-span-8 bg-white rounded-[3rem] border border-slate-200 shadow-inner overflow-hidden flex flex-col">
 
                 <div className="bg-slate-50 p-6 border-b flex items-center gap-3">
@@ -2301,7 +2080,7 @@ function AuditDetailPopup({
                   />
 
                   <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">
-                    Document Vault Review
+                    Document Vault Review (Including Renewal Past Permit)
                   </p>
 
                 </div>
@@ -2392,10 +2171,6 @@ function AuditDetailPopup({
 
             </div>
           )}
-
-          {/* =================================================
-              SCHEDULE
-          ================================================= */}
 
           {phase === 'schedule' && (
             <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
@@ -2581,10 +2356,6 @@ function AuditDetailPopup({
             </div>
           )}
 
-          {/* =================================================
-              REJECT
-          ================================================= */}
-
           {phase === 'reject' && (
             <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 bg-white p-8 rounded-[2.5rem] border border-red-100 shadow-xl">
 
@@ -2597,7 +2368,7 @@ function AuditDetailPopup({
                   />
 
                   <h3 className="text-2xl font-black uppercase italic tracking-tight">
-                    Reject Application
+                    Reject Application / Renewal
                   </h3>
 
                 </div>
@@ -2617,7 +2388,7 @@ function AuditDetailPopup({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
                   {[
-                    'Invalid Valid ID',
+                    'Invalid Valid ID / Past Permit',
                     'Missing / Invalid Document Files',
                     'Wrong / Unreachable Contact Number',
                   ].map(
@@ -2663,7 +2434,7 @@ function AuditDetailPopup({
                         e.target.value
                       )
                     }
-                    placeholder="Specify why the ID/Document/Number was flagged..."
+                    placeholder="Specify why the renewal or registration was flagged..."
                     className="w-full h-32 p-4 rounded-2xl border border-slate-200 bg-slate-50 text-xs font-medium focus:ring-2 focus:ring-red-500 focus:outline-none"
                   />
 
@@ -2715,4 +2486,3 @@ function AuditDetailPopup({
     </div>
   );
 }
-

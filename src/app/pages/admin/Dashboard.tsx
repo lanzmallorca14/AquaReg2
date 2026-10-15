@@ -86,6 +86,18 @@ export default function AquaRegAdminDashboard() {
           icon: <AlertCircle size={14} className="text-red-500" />
         });
       }
+
+      // Renewal log entry if past_permit is present
+      if ((v as any).past_permit) {
+        alerts.push({
+          id: `ren-${v.id}`,
+          type: 'RENEWAL',
+          title: 'Permit Renewal',
+          message: `${v.vessel_name || v.gear_type || 'Asset'} (${v.owner_name || 'N/A'}) has been updated/renewed.`,
+          time: 'Updated',
+          icon: <RefreshCw size={14} className="text-purple-500" />
+        });
+      }
     });
 
     alerts.push({
@@ -110,7 +122,7 @@ export default function AquaRegAdminDashboard() {
         nonMotorized: safeVessels.filter(v => !v.is_motorized).length,
         fishingGear: safeVessels.filter(v => (v.type || v.asset_category || '').toLowerCase().includes('gear')).length,
         payaoBalsa: safeVessels.filter(v => (v.type || v.asset_category || '').toLowerCase().match(/payao|balsa/)).length,
-        activePermits: safeVessels.filter(v => ['PASSED', 'APPROVED', 'REGISTERED', 'ACTIVE'].includes((v.status || '').toUpperCase())).length,
+        activePermits: safeVessels.filter(v => ['PASSED', 'APPROVED', 'REGISTERED', 'ACTIVE'].includes((v.status || '').toUpperCase()) || Boolean((v as any).past_permit)).length,
         critical: safeVessels.filter(v => getExpirationStatus(getExpiryFromVessel(v)).urgent),
         recent: [...safeVessels].reverse().slice(0, 5),
         barangayData: Object.entries(bMap).sort((a, b) => b[1] - a[1]).slice(0, 6),
@@ -121,7 +133,7 @@ export default function AquaRegAdminDashboard() {
 
   const complianceRate = Vessels.length > 0 ? Math.round((stats.activePermits / Vessels.length) * 100) : 0;
 
-  // Filtered vessel dataset for search/filter operations
+  // Filtered vessel dataset for search/filter operations (including renewals)
   const filteredVessels = useMemo(() => {
     return Vessels.filter(v => {
       const nameMatch = (v.vessel_name || v.gear_type || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -248,7 +260,9 @@ export default function AquaRegAdminDashboard() {
           <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 transition-all hover:shadow-md">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><Map size={20}/></div>
+
+<Map size={20}/>
+<div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"></div>
                 <div>
                   <h3 className="text-lg font-black uppercase italic text-slate-900 leading-none">Barangay Density</h3>
                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Vessel Concentrations by District</p>
@@ -303,8 +317,13 @@ export default function AquaRegAdminDashboard() {
                   {stats.critical.length > 0 ? stats.critical.slice(0, 5).map((v) => (
                     <tr key={v.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-8 py-4">
-                        <div className="font-black italic text-slate-900 uppercase text-xs">
+                        <div className="font-black italic text-slate-900 uppercase text-xs flex items-center gap-2">
                           {v.vessel_name || v.gear_type || 'Unnamed Asset'}
+                          {(v as any).past_permit && (
+                            <span className="bg-purple-50 text-purple-600 font-black text-[8px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                              <RefreshCw size={8} /> Renewal
+                            </span>
+                          )}
                         </div>
                         <div className="text-[9px] font-bold text-slate-400 uppercase">{v.owner_name || 'N/A'}</div>
                       </td>
@@ -346,9 +365,16 @@ export default function AquaRegAdminDashboard() {
                   {i !== stats.recent.length - 1 && <div className="absolute left-1.5 top-6 w-0.5 h-8 bg-slate-800" />}
                   <div className="h-3 w-3 rounded-full bg-blue-600 mt-1 z-10" />
                   <div>
-                    <p className="text-[11px] font-black uppercase italic leading-none">
-                      {v.vessel_name || v.gear_type || "Asset Modified"}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[11px] font-black uppercase italic leading-none">
+                        {v.vessel_name || v.gear_type || "Asset Modified"}
+                      </p>
+                      {(v as any).past_permit && (
+                        <span className="text-[7px] bg-purple-900/50 text-purple-300 font-black px-1.5 py-0.5 rounded uppercase flex items-center gap-0.5">
+                          <RefreshCw size={7} /> Renewal
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="text-[8px] bg-slate-800 text-blue-400 font-black px-2 py-0.5 rounded uppercase">
                         {v.barangay || 'Brgy. N/A'}
