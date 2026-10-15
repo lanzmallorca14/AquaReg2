@@ -674,7 +674,7 @@ export default function Homepage() {
                   Audit Tracker
                 </h2>
                 <p className="text-xs md:text-sm font-medium text-slate-300 mt-2 max-w-xl">
-                  Public audit portal. Check whether your application is scheduled for physical inspection, flagged for corrections, or approved for payment and permit processing[cite: 2].
+                  Public audit portal. Check whether your application is scheduled for physical inspection, flagged for corrections, or approved for payment and permit processing.
                 </p>
               </div>
 
