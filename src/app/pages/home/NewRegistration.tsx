@@ -2326,15 +2326,15 @@ export default function AquaRegNewRegistration() {
  
                           { 
                             f.assetCategory === 'payao' && ( 
-
+ 
                               <div className="space-y-3"> 
-
+ 
                                 <div className="space-y-1"> 
-
+ 
                                   <Label className="text-[8px] font-black uppercase text-slate-500"> 
                                     Vessel / Boat Number(s) 
                                   </Label> 
-
+ 
                                   <Input 
                                     value={f.payaoNumbers} 
                                     onChange={e => 
@@ -2343,9 +2343,9 @@ export default function AquaRegNewRegistration() {
                                     placeholder="99, 100, 101, 102, 103, 104" 
                                     className="h-10 font-black" 
                                   /> 
-
+ 
                                 </div> 
-
+ 
                                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm font-black uppercase text-blue-900 whitespace-pre-line"> 
                                   { 
                                     formatPayaoDisplay( 
@@ -2356,11 +2356,11 @@ export default function AquaRegNewRegistration() {
                                     'ENTER UNIT COUNT' 
                                   } 
                                 </div> 
-
+ 
                               </div> 
                             ) 
                           } 
-
+ 
                         </div> 
                       ) 
                     } 
@@ -2544,20 +2544,26 @@ export default function AquaRegNewRegistration() {
           {/* RIGHT */} 
           <div className="lg:col-span-4 space-y-4"> 
  
-            {/* NOTICE / WARNING DUPLICATED (TOP AND BOTTOM) */}
+            {/* NOTICE UPDATED FROM ATTENTION REQUIRED */}
             { 
               errs.length > 0 && ( 
+ 
                 <div className="p-4 bg-red-50 border border-red-100 rounded-2xl space-y-2"> 
+ 
                   <p className="text-[10px] font-black text-red-500 uppercase"> 
                     Notice: 
                   </p> 
+ 
                   <ul className="text-[8px] font-bold text-red-400 uppercase list-disc list-inside"> 
+ 
                     { 
                       errs.map((e, i) => 
                         <li key={i}>{e}</li>
                       ) 
                     } 
+ 
                   </ul> 
+ 
                 </div> 
               ) 
             } 
@@ -2679,11 +2685,11 @@ export default function AquaRegNewRegistration() {
                                 </span> 
  
                               </div> 
-
+ 
                               <span className="text-[9px] font-black uppercase text-white bg-black group-hover:bg-blue-600 px-3 py-1.5 rounded-lg transition-colors"> 
                                 Upload Scan 
-                              </span>  
-
+                              </span> 
+ 
                               <input 
                                 type="file" 
                                 onChange={e => 
@@ -2692,41 +2698,22 @@ export default function AquaRegNewRegistration() {
                                 className="hidden" 
                                 accept="image/*" 
                               /> 
-
+ 
                             </label> 
-
+ 
                           ) 
                         } 
-
+ 
                       </div> 
                     ); 
                   }) 
                 } 
-
+ 
               </div> 
-
+ 
             </div> 
-
-
-            {/* DUPLICATE WARNING BOX */}
-            { 
-              errs.length > 0 && ( 
-                <div className="p-4 bg-red-50 border border-red-100 rounded-2xl space-y-2"> 
-                  <p className="text-[10px] font-black text-red-500 uppercase"> 
-                    Notice: 
-                  </p> 
-                  <ul className="text-[8px] font-bold text-red-400 uppercase list-disc list-inside"> 
-                    { 
-                      errs.map((e, i) => 
-                        <li key={i}>{e}</li>
-                      ) 
-                    } 
-                  </ul> 
-                </div> 
-              ) 
-            } 
-
-
+ 
+ 
             {/* SUBMIT */} 
             <Button
               disabled={
